@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>GreenTrack – Clock In/Out</title>
+  <link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-section">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="logo-icon">🌿</span>
+        <h1>GreenTrack</h1>
+        <p>Landscaping Time Tracker</p>
+      </div>
+      <div id="login-error" class="alert alert-error section-hidden"></div>
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input id="inp-name" type="text" class="form-control" placeholder="Enter your name" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PIN</label>
+        <input id="inp-pin" type="password" class="form-control pin-input" placeholder="••••" maxlength="10" inputmode="numeric">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" onclick="login()">Sign In</button>
+      <div class="text-center mt-2">
+        <a href="admin.html" class="text-muted" style="font-size:.8rem">Admin Panel →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-section" class="section-hidden">
+  <header class="header">
+    <div class="header-logo">🌿 GreenTrack</div>
+    <div class="header-user">
+      <strong id="hdr-name"></strong>
+      <button class="btn btn-ghost" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="container" style="padding-top:1rem">
+    <div id="app-alert" class="section-hidden"></div>
+
+    <!-- Status: clocked out -->
+    <div id="s-out" class="clock-status out">
+      <span class="clock-icon">⏸</span>
+      <div class="clock-label">You're Clocked Out</div>
+      <div class="clock-sub">Select a location below to start</div>
+    </div>
+
+    <!-- Status: clocked in -->
+    <div id="s-in" class="clock-status in section-hidden">
+      <span class="clock-icon">▶</span>
+      <div class="clock-label">Currently Working</div>
+      <div id="s-loc" class="clock-sub"></div>
+      <div id="s-timer" class="clock-timer">0:00:00</div>
+      <div id="s-since" class="clock-sub"></div>
+    </div>
+
+    <!-- Clock In form -->
+    <div id="form-in" class="card">
+      <div class="card-title">Clock In</div>
+      <div class="form-group mb-0" style="margin-bottom:.75rem">
+        <label class="form-label">Select Location / Job Site</label>
+        <select id="loc-select" class="form-control">
+          <option value="">— Choose a location —</option>
+        </select>
+      </div>
+      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Clock In</button>
+    </div>
+
+    <!-- Clock Out form -->
+    <div id="form-out" class="card section-hidden">
+      <div class="card-title">Clock Out</div>
+      <div class="form-group mb-0" style="margin-bottom:.75rem">
+        <label class="form-label">Notes (optional)</label>
+        <input id="out-notes" type="text" class="form-control" placeholder="e.g. Mowed front lawn, trimmed hedges">
+      </div>
+      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ Clock Out</button>
+    </div>
+
+    <!-- Weekly summary -->
+    <div class="card">
+      <div class="card-title">This Week</div>
+      <div class="flex justify-between items-center">
+        <span class="text-muted" style="font-size:.875rem">Total Hours</span>
+        <span id="week-hours" class="font-bold text-green" style="font-size:1.2rem">—</span>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <div class="sec-hdr">
+        <div class="card-title mb-0">Recent Entries</div>
+        <button class="btn btn-outline btn-sm" onclick="loadHistory(true)">View All</button>
+      </div>
+      <div id="entries-list"><div class="table-empty">No entries yet</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

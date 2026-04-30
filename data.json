@@ -1,0 +1,56 @@
+{
+  "workers": [
+    {
+      "id": 1,
+      "name": "Ryan",
+      "pin": "7749",
+      "active": true,
+      "created_at": "2026-04-29T23:56:10.829Z"
+    }
+  ],
+  "locations": [
+    {
+      "id": 1,
+      "name": "Shop",
+      "address": "14862 US Hwy 70, Ardmore, OK 73401",
+      "active": true,
+      "created_at": "2026-04-30T00:00:43.924Z"
+    }
+  ],
+  "entries": [
+    {
+      "id": 1,
+      "worker_id": 1,
+      "location_id": 1,
+      "clock_in": "2026-04-30T00:01:01.647Z",
+      "clock_out": "2026-04-30T00:01:04.469Z",
+      "clock_in_lat": null,
+      "clock_in_lng": null,
+      "clock_out_lat": 35.493401,
+      "clock_out_lng": -97.54225783333332,
+      "duration_minutes": 0,
+      "notes": null
+    },
+    {
+      "id": 2,
+      "worker_id": 1,
+      "location_id": 1,
+      "clock_in": "2026-04-30T00:42:47.542Z",
+      "clock_out": "2026-04-30T00:42:50.523Z",
+      "clock_in_lat": null,
+      "clock_in_lng": null,
+      "clock_out_lat": 35.493456625,
+      "clock_out_lng": -97.54235925,
+      "duration_minutes": 0,
+      "notes": null
+    }
+  ],
+  "settings": {
+    "admin_password": "Cphillips1"
+  },
+  "nextId": {
+    "workers": 2,
+    "locations": 2,
+    "entries": 3
+  }
+}

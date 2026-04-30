@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GreenTrack – Admin</title>
+  <link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+<!-- ADMIN LOGIN -->
+<div id="admin-login">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="logo-icon">🛡️</span>
+        <h1>Admin Panel</h1>
+        <p>GreenTrack Management</p>
+      </div>
+      <div id="admin-login-err" class="alert alert-error section-hidden"></div>
+      <div class="form-group">
+        <label class="form-label">Admin Password</label>
+        <input id="admin-pw" type="password" class="form-control" placeholder="Enter password">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" onclick="adminLogin()">Sign In</button>
+      <div class="text-center mt-2">
+        <a href="/" class="text-muted" style="font-size:.8rem">← Worker App</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN APP -->
+<div id="admin-app" class="section-hidden">
+  <header class="header">
+    <div class="header-logo">🌿 GreenTrack Admin</div>
+    <div class="header-user">
+      <a href="/" class="btn btn-ghost">Worker App</a>
+      <button class="btn btn-ghost" onclick="adminSignOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="container-lg" style="padding-top:1rem">
+    <div id="admin-alert" class="section-hidden"></div>
+
+    <div class="admin-nav">
+      <button class="nav-btn active" data-tab="dashboard" onclick="showTab(this,'dashboard')">Dashboard</button>
+      <button class="nav-btn" data-tab="entries"   onclick="showTab(this,'entries')">Time Entries</button>
+      <button class="nav-btn" data-tab="workers"   onclick="showTab(this,'workers')">Workers</button>
+      <button class="nav-btn" data-tab="locations" onclick="showTab(this,'locations')">Locations</button>
+      <button class="nav-btn" data-tab="settings"  onclick="showTab(this,'settings')">Settings</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-value" id="st-workers">–</div><div class="stat-label">Workers</div></div>
+        <div class="stat-card"><div class="stat-value" id="st-active">–</div><div class="stat-label">Working Now</div></div>
+        <div class="stat-card"><div class="stat-value" id="st-today">–</div><div class="stat-label">Today's Hours</div></div>
+        <div class="stat-card"><div class="stat-value" id="st-week">–</div><div class="stat-label">This Week</div></div>
+      </div>
+      <div class="card">
+        <div class="sec-hdr">
+          <div class="card-title mb-0">Currently Working</div>
+          <button class="btn btn-outline btn-sm" onclick="loadActive()">↻ Refresh</button>
+        </div>
+        <div id="active-list"><div class="table-empty">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- ENTRIES -->
+    <div id="tab-entries" class="section-hidden">
+      <div class="filter-bar">
+        <div class="form-group">
+          <label class="form-label">Worker</label>
+          <select id="f-worker" class="form-control"><option value="">All Workers</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Location</label>
+          <select id="f-location" class="form-control"><option value="">All Locations</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">From</label>
+          <input id="f-start" type="date" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">To</label>
+          <input id="f-end" type="date" class="form-control">
+        </div>
+        <button class="btn btn-primary" onclick="loadEntries()">Filter</button>
+        <button class="btn btn-outline" onclick="exportCSV()">Export CSV</button>
+      </div>
+      <div class="card mb-0" style="padding:0;overflow:hidden">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Worker</th><th>Location</th>
+                <th>Clock In</th><th>Clock Out</th><th>Duration</th>
+                <th>GPS In</th><th>Notes</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="entries-tbody">
+              <tr><td colspan="9" class="table-empty">Set filters and click Filter</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- WORKERS -->
+    <div id="tab-workers" class="section-hidden">
+      <div class="sec-hdr">
+        <h2>Workers</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('m-add-worker')">+ Add Worker</button>
+      </div>
+      <div class="card mb-0" style="padding:0;overflow:hidden">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>PIN</th><th>Added</th><th>Actions</th></tr></thead>
+            <tbody id="workers-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOCATIONS -->
+    <div id="tab-locations" class="section-hidden">
+      <div class="sec-hdr">
+        <h2>Locations / Job Sites</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('m-add-location')">+ Add Location</button>
+      </div>
+      <div class="card mb-0" style="padding:0;overflow:hidden">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Address</th><th>Added</th><th>Actions</th></tr></thead>
+            <tbody id="locations-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="tab-settings" class="section-hidden">
+      <div class="card" style="max-width:400px">
+        <div class="card-title">Change Admin Password</div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input id="new-pw" type="password" class="form-control" placeholder="New password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input id="confirm-pw" type="password" class="form-control" placeholder="Confirm">
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add Worker -->
+<div id="m-add-worker" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Add Worker</div>
+    <div id="add-worker-err" class="alert alert-error section-hidden"></div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input id="nw-name" type="text" class="form-control" placeholder="Worker's full name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN</label>
+      <input id="nw-pin" type="text" class="form-control pin-input" placeholder="e.g. 1234" maxlength="10" inputmode="numeric">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('m-add-worker')">Cancel</button>
+      <button class="btn btn-primary" onclick="addWorker()">Add Worker</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Edit Worker -->
+<div id="m-edit-worker" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Edit Worker</div>
+    <input type="hidden" id="ew-id">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input id="ew-name" type="text" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="form-label">New PIN <span class="text-muted">(leave blank to keep current)</span></label>
+      <input id="ew-pin" type="text" class="form-control pin-input" placeholder="New PIN" maxlength="10" inputmode="numeric">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('m-edit-worker')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWorker()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add Location -->
+<div id="m-add-location" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Add Location / Job Site</div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input id="nl-name" type="text" class="form-control" placeholder="e.g. Johnson Residence">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Address <span class="text-muted">(optional)</span></label>
+      <input id="nl-addr" type="text" class="form-control" placeholder="123 Main St">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('m-add-location')">Cancel</button>
+      <button class="btn btn-primary" onclick="addLocation()">Add Location</button>
+    </div>
+  </div>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>
