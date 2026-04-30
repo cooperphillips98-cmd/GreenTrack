@@ -1,176 +1,119 @@
-const { Pool } = require('pg');console.log('SERVER STARTING...');
+console.log('SERVER STARTING...');
+const express = require('express');
+const path = require('path');
+const db = require('./database');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.post('/api/auth/login', async (req, res) => {
+  const { name, pin } = req.body;
+  if (!name || !pin) return res.status(400).json({ success: false, message: 'Name and PIN required.' });
+  const worker = await db.getWorkerByCredentials(name.trim(), pin.trim());
+  if (worker) {
+    res.json({ success: true, worker: { id: worker.id, name: worker.name } });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid name or PIN.' });
+  }
 });
 
-async function init() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS workers (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      pin TEXT NOT NULL,
-      active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS locations (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL,
-      address TEXT,
-      active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS time_entries (
-      id SERIAL PRIMARY KEY,
-      worker_id INTEGER REFERENCES workers(id),
-      location_id INTEGER REFERENCES locations(id),
-      clock_in TIMESTAMPTZ NOT NULL,
-      clock_out TIMESTAMPTZ,
-      clock_in_lat REAL,
-      clock_in_lng REAL,
-      clock_out_lat REAL,
-      clock_out_lng REAL,
-      duration_minutes INTEGER,
-      notes TEXT
-    );
-    INSERT INTO settings (key,value) VALUES ('admin_password','admin1234') ON CONFLICT DO NOTHING;
-  `);
-}
+app.post('/api/admin/auth', async (req, res) => {
+  const { password } = req.body;
+  if (await db.checkAdminPassword(password)) {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid password.' });
+  }
+});
 
-module.exports = {
-  init,
-  async getWorkerByCredentials(name, pin) {
-    const r = await pool.query('SELECT * FROM workers WHERE name=$1 AND pin=$2 AND active=TRUE', [name, pin]);
-    return r.rows[0] || null;
-  },
-  async checkAdminPassword(password) {
-    const r = await pool.query("SELECT value FROM settings WHERE key='admin_password'");
-    return r.rows[0]?.value === password;
-  },
-  async updateAdminPassword(password) {
-    await pool.query("UPDATE settings SET value=$1 WHERE key='admin_password'", [password]);
-  },
-  async getWorkers() {
-    const r = await pool.query('SELECT id,name,active,created_at FROM workers WHERE active=TRUE ORDER BY name');
-    return r.rows;
-  },
-  async addWorker(name, pin) {
-    try {
-      const r = await pool.query('INSERT INTO workers (name,pin) VALUES ($1,$2) RETURNING id,name', [name, pin]);
-      return r.rows[0];
-    } catch {
-      throw new Error('A worker with that name already exists.');
-    }
-  },
-  async updateWorker(id, name, pin) {
-    if (pin) {
-      await pool.query('UPDATE workers SET name=$1,pin=$2 WHERE id=$3', [name, pin, id]);
-    } else {
-      await pool.query('UPDATE workers SET name=$1 WHERE id=$2', [name, id]);
-    }
-  },
-  async deleteWorker(id) {
-    await pool.query('UPDATE workers SET active=FALSE WHERE id=$1', [id]);
-  },
-  async getLocations() {
-    const r = await pool.query('SELECT * FROM locations WHERE active=TRUE ORDER BY name');
-    return r.rows;
-  },
-  async addLocation(name, address) {
-    const r = await pool.query('INSERT INTO locations (name,address) VALUES ($1,$2) RETURNING *', [name, address || null]);
-    return r.rows[0];
-  },
-  async deleteLocation(id) {
-    await pool.query('UPDATE locations SET active=FALSE WHERE id=$1', [id]);
-  },
-  async clockIn(workerId, locationId, lat, lng) {
-    const r = await pool.query(
-      'INSERT INTO time_entries (worker_id,location_id,clock_in,clock_in_lat,clock_in_lng) VALUES ($1,$2,NOW(),$3,$4) RETURNING id,clock_in',
-      [workerId, locationId, lat || null, lng || null]
-    );
-    return r.rows[0];
-  },
-  async clockOut(entryId, lat, lng, notes) {
-    const r = await pool.query(`
-      UPDATE time_entries SET
-        clock_out=NOW(),
-        clock_out_lat=$2,
-        clock_out_lng=$3,
-        duration_minutes=ROUND(EXTRACT(EPOCH FROM (NOW()-clock_in))/60),
-        notes=$4
-      WHERE id=$1
-      RETURNING id,clock_out,duration_minutes
-    `, [entryId, lat || null, lng || null, notes || null]);
-    return r.rows[0];
-  },
-  async getCurrentEntry(workerId) {
-    const r = await pool.query(`
-      SELECT te.*,l.name as location_name
-      FROM time_entries te
-      JOIN locations l ON te.location_id=l.id
-      WHERE te.worker_id=$1 AND te.clock_out IS NULL
-    `, [workerId]);
-    return r.rows[0] || null;
-  },
-  async getActiveEntries() {
-    const r = await pool.query(`
-      SELECT te.*,l.name as location_name,w.name as worker_name
-      FROM time_entries te
-      JOIN locations l ON te.location_id=l.id
-      JOIN workers w ON te.worker_id=w.id
-      WHERE te.clock_out IS NULL
-      ORDER BY te.clock_in
-    `);
-    return r.rows;
-  },
-  async getWorkerEntries(workerId, startDate, endDate) {
-    let q = `
-      SELECT te.*,l.name as location_name
-      FROM time_entries te
-      JOIN locations l ON te.location_id=l.id
-      WHERE te.worker_id=$1
-    `;
-    const p = [workerId]; let i = 2;
-    if (startDate) { q += ` AND te.clock_in::date>=$${i++}`; p.push(startDate); }
-    if (endDate)   { q += ` AND te.clock_in::date<=$${i++}`; p.push(endDate); }
-    q += ' ORDER BY te.clock_in DESC LIMIT 100';
-    const r = await pool.query(q, p);
-    return r.rows;
-  },
-  async getAllEntries({ workerId, locationId, startDate, endDate }) {
-    let q = `
-      SELECT te.*,l.name as location_name,w.name as worker_name
-      FROM time_entries te
-      JOIN locations l ON te.location_id=l.id
-      JOIN workers w ON te.worker_id=w.id
-      WHERE 1=1
-    `;
-    const p = []; let i = 1;
-    if (workerId)   { q += ` AND te.worker_id=$${i++}`;       p.push(workerId); }
-    if (locationId) { q += ` AND te.location_id=$${i++}`;     p.push(locationId); }
-    if (startDate)  { q += ` AND te.clock_in::date>=$${i++}`; p.push(startDate); }
-    if (endDate)    { q += ` AND te.clock_in::date<=$${i++}`; p.push(endDate); }
-    q += ' ORDER BY te.clock_in DESC';
-    const r = await pool.query(q, p);
-    return r.rows;
-  },
-  async getStats() {
-    const [w, a, t, wk] = await Promise.all([
-      pool.query('SELECT COUNT(*) FROM workers WHERE active=TRUE'),
-      pool.query('SELECT COUNT(*) FROM time_entries WHERE clock_out IS NULL'),
-      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date=CURRENT_DATE AND duration_minutes IS NOT NULL"),
-      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date>=CURRENT_DATE-6 AND duration_minutes IS NOT NULL"),
-    ]);
-    return {
-      totalWorkers: parseInt(w.rows[0].count),
-      clockedIn:    parseInt(a.rows[0].count),
-      todayHours:   +(parseInt(t.rows[0].total)  / 60).toFixed(1),
-      weekHours:    +(parseInt(wk.rows[0].total) / 60).toFixed(1),
-    };
-  },
-};
+app.get('/api/locations', async (req, res) => res.json(await db.getLocations()));
+
+app.post('/api/entries/clock-in', async (req, res) => {
+  const { workerId, locationId, latitude, longitude } = req.body;
+  if (!workerId || !locationId) return res.status(400).json({ success: false, message: 'Missing required fields.' });
+  if (await db.getCurrentEntry(workerId)) return res.status(400).json({ success: false, message: 'Already clocked in.' });
+  const entry = await db.clockIn(workerId, locationId, latitude, longitude);
+  res.json({ success: true, entry });
+});
+
+app.post('/api/entries/clock-out', async (req, res) => {
+  const { workerId, latitude, longitude, notes } = req.body;
+  const current = await db.getCurrentEntry(workerId);
+  if (!current) return res.status(400).json({ success: false, message: 'Not currently clocked in.' });
+  const entry = await db.clockOut(current.id, latitude, longitude, notes);
+  res.json({ success: true, entry });
+});
+
+app.get('/api/entries/current/:workerId', async (req, res) => {
+  res.json({ entry: await db.getCurrentEntry(req.params.workerId) });
+});
+
+app.get('/api/entries/worker/:workerId', async (req, res) => {
+  const { startDate, endDate } = req.query;
+  res.json(await db.getWorkerEntries(req.params.workerId, startDate, endDate));
+});
+
+app.get('/api/admin/stats', async (req, res) => res.json(await db.getStats()));
+app.get('/api/admin/active', async (req, res) => res.json(await db.getActiveEntries()));
+
+app.get('/api/admin/entries', async (req, res) => {
+  const { workerId, locationId, startDate, endDate } = req.query;
+  res.json(await db.getAllEntries({ workerId, locationId, startDate, endDate }));
+});
+
+app.post('/api/admin/entries/:id/clock-out', async (req, res) => {
+  const entry = await db.clockOut(req.params.id, null, null, 'Clocked out by admin');
+  res.json({ success: true, entry });
+});
+
+app.get('/api/admin/workers', async (req, res) => res.json(await db.getWorkers()));
+
+app.post('/api/admin/workers', async (req, res) => {
+  const { name, pin } = req.body;
+  if (!name || !pin) return res.status(400).json({ success: false, message: 'Name and PIN required.' });
+  try {
+    res.json({ success: true, worker: await db.addWorker(name.trim(), pin.trim()) });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.message });
+  }
+});
+
+app.put('/api/admin/workers/:id', async (req, res) => {
+  const { name, pin } = req.body;
+  await db.updateWorker(req.params.id, name, pin || null);
+  res.json({ success: true });
+});
+
+app.delete('/api/admin/workers/:id', async (req, res) => {
+  await db.deleteWorker(req.params.id);
+  res.json({ success: true });
+});
+
+app.post('/api/admin/locations', async (req, res) => {
+  const { name, address } = req.body;
+  if (!name) return res.status(400).json({ success: false, message: 'Name required.' });
+  res.json({ success: true, location: await db.addLocation(name.trim(), address) });
+});
+
+app.delete('/api/admin/locations/:id', async (req, res) => {
+  await db.deleteLocation(req.params.id);
+  res.json({ success: true });
+});
+
+app.put('/api/admin/settings/password', async (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ success: false, message: 'Password required.' });
+  await db.updateAdminPassword(password);
+  res.json({ success: true });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server started on port ${PORT}`);
+  db.init().then(() => {
+    console.log('Database connected OK');
+  }).catch(err => {
+    console.error('Database error:', err.message);
+  });
+});
