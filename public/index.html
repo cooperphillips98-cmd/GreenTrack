@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>GreenTrack – Clock In/Out</title>
   <link rel="stylesheet" href="style.css?v=3">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <meta name="theme-color" content="#2d6a4f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
 
@@ -27,6 +32,12 @@
         <input id="inp-pin" type="password" class="form-control pin-input" placeholder="••••" maxlength="10" inputmode="numeric">
       </div>
       <button class="btn btn-primary btn-block btn-lg" onclick="login()">Sign In</button>
+      <div id="install-banner" class="section-hidden" style="margin-top:.75rem">
+        <button class="btn btn-outline btn-block" id="install-btn" onclick="installApp()">📱 Add to Home Screen</button>
+      </div>
+      <div id="ios-banner" class="section-hidden" style="margin-top:.75rem;background:var(--green-pale);border-radius:var(--r-sm);padding:.65rem;font-size:.8rem;color:var(--green-dark);text-align:center;line-height:1.5">
+        To install: tap <strong>Share ⬆</strong> then <strong>"Add to Home Screen"</strong>
+      </div>
       <div class="text-center mt-2">
         <a href="admin.html" class="text-muted" style="font-size:.8rem">Admin Panel →</a>
       </div>
