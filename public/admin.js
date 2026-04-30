@@ -1,304 +1,238 @@
-let allEntries = [];
-let activeWorkers = [];
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GreenTrack – Admin</title>
+  <link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (localStorage.getItem('gt_admin') === 'true') showAdminApp();
-  document.getElementById('admin-pw').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
-  // Default date filters: last 7 days
-  const now = new Date();
-  document.getElementById('f-end').value = now.toISOString().split('T')[0];
-  now.setDate(now.getDate() - 6);
-  document.getElementById('f-start').value = now.toISOString().split('T')[0];
-});
-
-async function adminLogin() {
-  const password = document.getElementById('admin-pw').value;
-  const r = await post('/api/admin/auth', { password });
-  if (r.success) {
-    localStorage.setItem('gt_admin', 'true');
-    showAdminApp();
-  } else {
-    const el = document.getElementById('admin-login-err');
-    el.textContent = r.message || 'Invalid password.';
-    show('admin-login-err');
-  }
-}
-
-function adminSignOut() {
-  localStorage.removeItem('gt_admin');
-  hide('admin-app'); show('admin-login');
-  document.getElementById('admin-pw').value = '';
-}
-
-async function showAdminApp() {
-  hide('admin-login'); show('admin-app');
-  await Promise.all([loadStats(), loadActive(), loadWorkers(), loadLocations()]);
-  setInterval(updateTimers, 1000);
-  setInterval(() => { if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) { loadStats(); loadActive(); } }, 30000);
-}
-
-function showTab(btn, tab) {
-  ['dashboard','entries','workers','locations','settings'].forEach(t => {
-    document.getElementById('tab-' + t).classList.add('section-hidden');
-  });
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.remove('section-hidden');
-  btn.classList.add('active');
-  if (tab === 'entries') loadEntries();
-}
-
-async function loadStats() {
-  const s = await get('/api/admin/stats');
-  document.getElementById('st-workers').textContent = s.totalWorkers;
-  document.getElementById('st-active').textContent  = s.clockedIn;
-  document.getElementById('st-today').textContent   = s.todayHours + 'h';
-  document.getElementById('st-week').textContent    = s.weekHours + 'h';
-}
-
-async function loadActive() {
-  activeWorkers = await get('/api/admin/active');
-  const el = document.getElementById('active-list');
-  if (!activeWorkers.length) {
-    el.innerHTML = '<div class="table-empty">No workers currently clocked in</div>'; return;
-  }
-  el.innerHTML = activeWorkers.map(w => `
-    <div class="active-row">
-      <div>
-        <div class="active-name"><span class="status-dot on"></span>${esc(w.worker_name)}</div>
-        <div class="active-detail">📍 ${esc(w.location_name)} · Since ${fmtTime(w.clock_in)}</div>
+<!-- ADMIN LOGIN -->
+<div id="admin-login">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="logo-icon">🛡️</span>
+        <h1>Admin Panel</h1>
+        <p>GreenTrack Management</p>
       </div>
-      <div style="display:flex;align-items:center;gap:.6rem">
-        <div class="active-timer" id="atimer-${w.id}">${fmtElapsed(Date.now()-new Date(w.clock_in).getTime())}</div>
-        <button class="btn btn-warning btn-sm" onclick="forceClockOut(${w.id},'${esc(w.worker_name)}')">Clock Out</button>
+      <div id="admin-login-err" class="alert alert-error section-hidden"></div>
+      <div class="form-group">
+        <label class="form-label">Admin Password</label>
+        <input id="admin-pw" type="password" class="form-control" placeholder="Enter password">
       </div>
-    </div>`).join('');
-}
+      <button class="btn btn-primary btn-block btn-lg" onclick="adminLogin()">Sign In</button>
+      <div class="text-center mt-2">
+        <a href="/" class="text-muted" style="font-size:.8rem">← Worker App</a>
+      </div>
+    </div>
+  </div>
+</div>
 
-function updateTimers() {
-  activeWorkers.forEach(w => {
-    const el = document.getElementById('atimer-' + w.id);
-    if (el) el.textContent = fmtElapsed(Date.now() - new Date(w.clock_in).getTime());
-  });
-}
+<!-- ADMIN APP -->
+<div id="admin-app" class="section-hidden">
+  <header class="header">
+    <div class="header-logo">🌿 GreenTrack Admin</div>
+    <div class="header-user">
+      <a href="/" class="btn btn-ghost">Worker App</a>
+      <button class="btn btn-ghost" onclick="adminSignOut()">Sign Out</button>
+    </div>
+  </header>
 
-async function forceClockOut(id, name) {
-  if (!confirm(`Clock out ${name}?`)) return;
-  const r = await post(`/api/admin/entries/${id}/clock-out`, {});
-  if (r.success) { showAlert(`${name} clocked out.`, 'success'); loadActive(); loadStats(); }
-}
+  <div class="container-lg" style="padding-top:1rem">
+    <div id="admin-alert" class="section-hidden"></div>
 
-async function loadWorkers() {
-  const workers = await get('/api/admin/workers');
-  const fSel = document.getElementById('f-worker');
-  fSel.innerHTML = '<option value="">All Workers</option>' +
-    workers.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
-  const tbody = document.getElementById('workers-tbody');
-  if (!workers.length) { tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No workers yet</td></tr>'; return; }
-  tbody.innerHTML = workers.map(w => `
-    <tr>
-      <td><strong>${esc(w.name)}</strong></td>
-      <td><span class="badge badge-gray">Hidden</span></td>
-      <td>${fmtDate(w.created_at)}</td>
-      <td>
-        <button class="btn btn-outline btn-sm" onclick="openEditWorker(${w.id},'${esc(w.name)}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="removeWorker(${w.id},'${esc(w.name)}')">Remove</button>
-      </td>
-    </tr>`).join('');
-}
+    <div class="admin-nav">
+      <button class="nav-btn active" data-tab="dashboard" onclick="showTab(this,'dashboard')">Dashboard</button>
+      <button class="nav-btn" data-tab="entries"   onclick="showTab(this,'entries')">Time Entries</button>
+      <button class="nav-btn" data-tab="workers"   onclick="showTab(this,'workers')">Workers</button>
+      <button class="nav-btn" data-tab="locations" onclick="showTab(this,'locations')">Locations</button>
+      <button class="nav-btn" data-tab="settings"  onclick="showTab(this,'settings')">Settings</button>
+    </div>
 
-async function loadLocations() {
-  const locs = await get('/api/locations');
-  const fSel = document.getElementById('f-location');
-  fSel.innerHTML = '<option value="">All Locations</option>' +
-    locs.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
-  const tbody = document.getElementById('locations-tbody');
-  if (!locs.length) { tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No locations yet</td></tr>'; return; }
-  tbody.innerHTML = locs.map(l => `
-    <tr>
-      <td><strong>${esc(l.name)}</strong></td>
-      <td>${l.address ? esc(l.address) : '<span class="text-muted">—</span>'}</td>
-      <td>${fmtDate(l.created_at)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="removeLocation(${l.id},'${esc(l.name)}')">Remove</button></td>
-    </tr>`).join('');
-}
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-value" id="st-workers">–</div><div class="stat-label">Workers</div></div>
+        <div class="stat-card"><div class="stat-value" id="st-active">–</div><div class="stat-label">Working Now</div></div>
+        <div class="stat-card"><div class="stat-value" id="st-today">–</div><div class="stat-label">Today's Hours</div></div>
+        <div class="stat-card"><div class="stat-value" id="st-week">–</div><div class="stat-label">This Week</div></div>
+      </div>
+      <div class="card">
+        <div class="sec-hdr">
+          <div class="card-title mb-0">Currently Working</div>
+          <button class="btn btn-outline btn-sm" onclick="loadActive()">↻ Refresh</button>
+        </div>
+        <div id="active-list"><div class="table-empty">Loading…</div></div>
+      </div>
+    </div>
 
-async function loadEntries() {
-  const params = new URLSearchParams();
-  const w = document.getElementById('f-worker').value;
-  const l = document.getElementById('f-location').value;
-  const s = document.getElementById('f-start').value;
-  const e = document.getElementById('f-end').value;
-  if (w) params.set('workerId', w);
-  if (l) params.set('locationId', l);
-  if (s) params.set('startDate', s);
-  if (e) params.set('endDate', e);
-  allEntries = await get('/api/admin/entries?' + params);
-  const tbody = document.getElementById('entries-tbody');
-  if (!allEntries.length) { tbody.innerHTML = '<tr><td colspan="9" class="table-empty">No entries found</td></tr>'; return; }
-  tbody.innerHTML = allEntries.map(entry => {
-    const hasGPS = entry.clock_in_lat && entry.clock_in_lng;
-    const gps = hasGPS
-      ? `<a href="https://maps.google.com/?q=${entry.clock_in_lat},${entry.clock_in_lng}" target="_blank" class="badge badge-success">📍 Map</a>`
-      : '<span class="text-muted">—</span>';
-    const active = !entry.clock_out;
-    return `<tr>
-      <td>${fmtDate(entry.clock_in)}</td>
-      <td><strong>${esc(entry.worker_name)}</strong></td>
-      <td>${esc(entry.location_name)}</td>
-      <td>${fmtTime(entry.clock_in)}</td>
-      <td>${entry.clock_out ? fmtTime(entry.clock_out) : '<span class="badge badge-success">Active</span>'}</td>
-      <td>${entry.duration_minutes ? '<strong>' + fmtDur(entry.duration_minutes) + '</strong>' : '<span class="text-muted">—</span>'}</td>
-      <td>${gps}</td>
-      <td>${entry.notes ? esc(entry.notes) : '<span class="text-muted">—</span>'}</td>
-      <td>${active ? `<button class="btn btn-warning btn-sm" onclick="forceClockOut(${entry.id},'${esc(entry.worker_name)}')">Clock Out</button>` : ''}</td>
-    </tr>`;
-  }).join('');
-}
+    <!-- ENTRIES -->
+    <div id="tab-entries" class="section-hidden">
+      <div class="filter-bar">
+        <div class="form-group">
+          <label class="form-label">Worker</label>
+          <select id="f-worker" class="form-control"><option value="">All Workers</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Location</label>
+          <select id="f-location" class="form-control"><option value="">All Locations</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">From</label>
+          <input id="f-start" type="date" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">To</label>
+          <input id="f-end" type="date" class="form-control">
+        </div>
+        <button class="btn btn-primary" onclick="loadEntries()">Filter</button>
+        <button class="btn btn-outline" onclick="exportCSV()">Export CSV</button>
+      </div>
+      <div class="card mb-0" style="padding:0;overflow:hidden">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Worker</th><th>Location</th>
+                <th>Clock In</th><th>Clock Out</th><th>Duration</th>
+                <th>GPS In</th><th>Notes</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="entries-tbody">
+              <tr><td colspan="9" class="table-empty">Set filters and click Filter</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-function exportCSV() {
-  if (!allEntries.length) { showAlert('No entries to export. Apply filters first.', 'warning'); return; }
-  const hdr = ['Date','Worker','Location','Clock In','Clock Out','Duration (min)','Duration (hrs)','GPS Lat','GPS Lng','Notes'];
-  const rows = allEntries.map(e => [
-    fmtDate(e.clock_in), e.worker_name, e.location_name,
-    fmtDateTime(e.clock_in), e.clock_out ? fmtDateTime(e.clock_out) : '',
-    e.duration_minutes || '', e.duration_minutes ? (e.duration_minutes/60).toFixed(2) : '',
-    e.clock_in_lat || '', e.clock_in_lng || '', e.notes || ''
-  ]);
-  const csv = [hdr,...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})),
-    download: `greentrack-${new Date().toISOString().split('T')[0]}.csv`
-  });
-  a.click();
-}
+    <!-- WORKERS -->
+    <div id="tab-workers" class="section-hidden">
+      <div class="sec-hdr">
+        <h2>Workers</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('m-add-worker')">+ Add Worker</button>
+      </div>
+      <div class="workers-grid">
+        <div class="card mb-0" style="padding:0;overflow:hidden">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>PIN</th><th>Added</th><th>Actions</th></tr></thead>
+              <tbody id="workers-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mb-0">
+          <div class="card-title">Add App to Phone</div>
+          <p style="font-size:.825rem;color:var(--gray-600);margin-bottom:.75rem">Share this link with workers so they can add GreenTrack to their home screen.</p>
+          <div style="display:flex;gap:.5rem;margin-bottom:.875rem">
+            <input id="app-url" class="form-control" readonly style="font-size:.75rem">
+            <button class="btn btn-outline btn-sm" onclick="copyAppUrl()" style="white-space:nowrap">Copy</button>
+          </div>
+          <div style="background:var(--gray-100);border-radius:var(--r-sm);padding:.65rem;font-size:.8rem;margin-bottom:.5rem;line-height:1.5">
+            <strong>📱 iPhone:</strong> Open link in Safari → tap Share ⬆ → "Add to Home Screen"
+          </div>
+          <div style="background:var(--gray-100);border-radius:var(--r-sm);padding:.65rem;font-size:.8rem;line-height:1.5">
+            <strong>🤖 Android:</strong> Open link in Chrome → tap Menu ⋮ → "Add to Home Screen"
+          </div>
+        </div>
+      </div>
+    </div>
 
-// Worker CRUD
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
-document.addEventListener('click', e => {
-  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
-});
+    <!-- LOCATIONS -->
+    <div id="tab-locations" class="section-hidden">
+      <div class="sec-hdr">
+        <h2>Locations / Job Sites</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('m-add-location')">+ Add Location</button>
+      </div>
+      <div class="card mb-0" style="padding:0;overflow:hidden">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Address</th><th>Added</th><th>Actions</th></tr></thead>
+            <tbody id="locations-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-async function addWorker() {
-  const name = document.getElementById('nw-name').value.trim();
-  const pin  = document.getElementById('nw-pin').value.trim();
-  if (!name || !pin) { showModalErr('add-worker-err','Name and PIN required.'); return; }
-  const r = await post('/api/admin/workers', { name, pin });
-  if (r.success) {
-    closeModal('m-add-worker');
-    document.getElementById('nw-name').value = '';
-    document.getElementById('nw-pin').value = '';
-    loadWorkers(); loadStats();
-    showAlert(`Worker "${name}" added.`, 'success');
-  } else {
-    showModalErr('add-worker-err', r.message || 'Failed.');
-  }
-}
+    <!-- SETTINGS -->
+    <div id="tab-settings" class="section-hidden">
+      <div class="card" style="max-width:400px">
+        <div class="card-title">Change Admin Password</div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input id="new-pw" type="password" class="form-control" placeholder="New password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input id="confirm-pw" type="password" class="form-control" placeholder="Confirm">
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-function openEditWorker(id, name) {
-  document.getElementById('ew-id').value = id;
-  document.getElementById('ew-name').value = name;
-  document.getElementById('ew-pin').value = '';
-  openModal('m-edit-worker');
-}
+<!-- MODAL: Add Worker -->
+<div id="m-add-worker" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Add Worker</div>
+    <div id="add-worker-err" class="alert alert-error section-hidden"></div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input id="nw-name" type="text" class="form-control" placeholder="Worker's full name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN</label>
+      <input id="nw-pin" type="text" class="form-control pin-input" placeholder="e.g. 1234" maxlength="10" inputmode="numeric">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('m-add-worker')">Cancel</button>
+      <button class="btn btn-primary" onclick="addWorker()">Add Worker</button>
+    </div>
+  </div>
+</div>
 
-async function saveWorker() {
-  const id   = document.getElementById('ew-id').value;
-  const name = document.getElementById('ew-name').value.trim();
-  const pin  = document.getElementById('ew-pin').value.trim();
-  await put(`/api/admin/workers/${id}`, { name, pin });
-  closeModal('m-edit-worker');
-  loadWorkers();
-  showAlert('Worker updated.', 'success');
-}
+<!-- MODAL: Edit Worker -->
+<div id="m-edit-worker" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Edit Worker</div>
+    <input type="hidden" id="ew-id">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input id="ew-name" type="text" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="form-label">New PIN <span class="text-muted">(leave blank to keep current)</span></label>
+      <input id="ew-pin" type="text" class="form-control pin-input" placeholder="New PIN" maxlength="10" inputmode="numeric">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('m-edit-worker')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWorker()">Save</button>
+    </div>
+  </div>
+</div>
 
-async function removeWorker(id, name) {
-  if (!confirm(`Remove worker "${name}"? Their time history is kept.`)) return;
-  await del(`/api/admin/workers/${id}`);
-  loadWorkers(); loadStats();
-  showAlert(`Worker "${name}" removed.`, 'success');
-}
+<!-- MODAL: Add Location -->
+<div id="m-add-location" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Add Location / Job Site</div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input id="nl-name" type="text" class="form-control" placeholder="e.g. Johnson Residence">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Address <span class="text-muted">(optional)</span></label>
+      <input id="nl-addr" type="text" class="form-control" placeholder="123 Main St">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('m-add-location')">Cancel</button>
+      <button class="btn btn-primary" onclick="addLocation()">Add Location</button>
+    </div>
+  </div>
+</div>
 
-// Location CRUD
-async function addLocation() {
-  const name = document.getElementById('nl-name').value.trim();
-  const addr = document.getElementById('nl-addr').value.trim();
-  if (!name) return;
-  await post('/api/admin/locations', { name, address: addr });
-  closeModal('m-add-location');
-  document.getElementById('nl-name').value = '';
-  document.getElementById('nl-addr').value = '';
-  loadLocations();
-  showAlert(`Location "${name}" added.`, 'success');
-}
-
-async function removeLocation(id, name) {
-  if (!confirm(`Remove location "${name}"?`)) return;
-  await del(`/api/admin/locations/${id}`);
-  loadLocations();
-  showAlert(`Location "${name}" removed.`, 'success');
-}
-
-// Settings
-async function changePassword() {
-  const np = document.getElementById('new-pw').value;
-  const cp = document.getElementById('confirm-pw').value;
-  if (!np) { showAlert('Enter a new password.', 'error'); return; }
-  if (np !== cp) { showAlert('Passwords do not match.', 'error'); return; }
-  const r = await put('/api/admin/settings/password', { password: np });
-  if (r.success) {
-    document.getElementById('new-pw').value = '';
-    document.getElementById('confirm-pw').value = '';
-    showAlert('Password updated.', 'success');
-  }
-}
-
-// Formatters
-function fmtElapsed(ms) {
-  const s = Math.floor(ms/1000);
-  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
-}
-function fmtDur(m) {
-  if (!m) return '—';
-  const h = Math.floor(m/60), min = m%60;
-  return h === 0 ? `${min}m` : min === 0 ? `${h}h` : `${h}h ${min}m`;
-}
-function fmtTime(iso) { return iso ? new Date(iso).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : ''; }
-function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}) : ''; }
-function fmtDateTime(iso) { const d = new Date(iso); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString(); }
-function pad(n) { return String(n).padStart(2,'0'); }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-// DOM helpers
-function show(id) { document.getElementById(id).classList.remove('section-hidden'); }
-function hide(id) { document.getElementById(id).classList.add('section-hidden'); }
-function showAlert(msg, type) {
-  const el = document.getElementById('admin-alert');
-  el.className = `alert alert-${type==='error'?'error':type==='warning'?'warning':'success'}`;
-  el.textContent = msg; show('admin-alert');
-  setTimeout(() => hide('admin-alert'), 5000);
-}
-function showModalErr(id, msg) {
-  const el = document.getElementById(id);
-  el.textContent = msg; show(id);
-}
-
-// Fetch helpers
-async function get(url) { const r = await fetch(url); return r.json(); }
-async function post(url, body) {
-  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  return r.json();
-}
-async function put(url, body) {
-  const r = await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  return r.json();
-}
-async function del(url) {
-  const r = await fetch(url,{method:'DELETE'});
-  return r.json();
-}
+<script src="admin.js"></script>
+</body>
+</html>
