@@ -1,0 +1,12 @@
+{
+  "name": "GreenTrack",
+  "short_name": "GreenTrack",
+  "description": "Landscaping time tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1b4332",
+  "theme_color": "#2d6a4f",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
