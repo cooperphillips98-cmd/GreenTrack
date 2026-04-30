@@ -1,177 +1,176 @@
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
 
-const DB_PATH = process.env.DATA_DIR
-  ? path.join(process.env.DATA_DIR, 'data.json')
-  : path.join(__dirname, 'data.json');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-function load() {
-  if (!fs.existsSync(DB_PATH)) {
-    const initial = {
-      workers: [],
-      locations: [],
-      entries: [],
-      settings: { admin_password: 'admin1234' },
-      nextId: { workers: 1, locations: 1, entries: 1 }
-    };
-    fs.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2));
-    return initial;
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
-
-function save(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-function now() {
-  return new Date().toISOString();
+async function init() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS workers (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      pin TEXT NOT NULL,
+      active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS locations (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      address TEXT,
+      active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS time_entries (
+      id SERIAL PRIMARY KEY,
+      worker_id INTEGER REFERENCES workers(id),
+      location_id INTEGER REFERENCES locations(id),
+      clock_in TIMESTAMPTZ NOT NULL,
+      clock_out TIMESTAMPTZ,
+      clock_in_lat REAL,
+      clock_in_lng REAL,
+      clock_out_lat REAL,
+      clock_out_lng REAL,
+      duration_minutes INTEGER,
+      notes TEXT
+    );
+    INSERT INTO settings (key,value) VALUES ('admin_password','admin1234') ON CONFLICT DO NOTHING;
+  `);
 }
 
 module.exports = {
-  getWorkerByCredentials(name, pin) {
-    const db = load();
-    return db.workers.find(w => w.name === name && w.pin === pin && w.active) || null;
+  init,
+  async getWorkerByCredentials(name, pin) {
+    const r = await pool.query('SELECT * FROM workers WHERE name=$1 AND pin=$2 AND active=TRUE', [name, pin]);
+    return r.rows[0] || null;
   },
-  checkAdminPassword(password) {
-    return load().settings.admin_password === password;
+  async checkAdminPassword(password) {
+    const r = await pool.query("SELECT value FROM settings WHERE key='admin_password'");
+    return r.rows[0]?.value === password;
   },
-  updateAdminPassword(password) {
-    const db = load(); db.settings.admin_password = password; save(db);
+  async updateAdminPassword(password) {
+    await pool.query("UPDATE settings SET value=$1 WHERE key='admin_password'", [password]);
   },
-
-  getWorkers() {
-    return load().workers.filter(w => w.active).sort((a, b) => a.name.localeCompare(b.name));
+  async getWorkers() {
+    const r = await pool.query('SELECT id,name,active,created_at FROM workers WHERE active=TRUE ORDER BY name');
+    return r.rows;
   },
-  addWorker(name, pin) {
-    const db = load();
-    if (db.workers.some(w => w.name === name && w.active)) throw new Error('A worker with that name already exists.');
-    const worker = { id: db.nextId.workers++, name, pin, active: true, created_at: now() };
-    db.workers.push(worker);
-    save(db);
-    return { id: worker.id, name };
+  async addWorker(name, pin) {
+    try {
+      const r = await pool.query('INSERT INTO workers (name,pin) VALUES ($1,$2) RETURNING id,name', [name, pin]);
+      return r.rows[0];
+    } catch {
+      throw new Error('A worker with that name already exists.');
+    }
   },
-  updateWorker(id, name, pin) {
-    const db = load();
-    const w = db.workers.find(w => w.id == id);
-    if (w) { w.name = name; if (pin) w.pin = pin; }
-    save(db);
+  async updateWorker(id, name, pin) {
+    if (pin) {
+      await pool.query('UPDATE workers SET name=$1,pin=$2 WHERE id=$3', [name, pin, id]);
+    } else {
+      await pool.query('UPDATE workers SET name=$1 WHERE id=$2', [name, id]);
+    }
   },
-  deleteWorker(id) {
-    const db = load();
-    const w = db.workers.find(w => w.id == id);
-    if (w) w.active = false;
-    save(db);
+  async deleteWorker(id) {
+    await pool.query('UPDATE workers SET active=FALSE WHERE id=$1', [id]);
   },
-
-  getLocations() {
-    return load().locations.filter(l => l.active).sort((a, b) => a.name.localeCompare(b.name));
+  async getLocations() {
+    const r = await pool.query('SELECT * FROM locations WHERE active=TRUE ORDER BY name');
+    return r.rows;
   },
-  addLocation(name, address) {
-    const db = load();
-    const loc = { id: db.nextId.locations++, name, address: address || null, active: true, created_at: now() };
-    db.locations.push(loc);
-    save(db);
-    return { id: loc.id, name, address };
+  async addLocation(name, address) {
+    const r = await pool.query('INSERT INTO locations (name,address) VALUES ($1,$2) RETURNING *', [name, address || null]);
+    return r.rows[0];
   },
-  deleteLocation(id) {
-    const db = load();
-    const l = db.locations.find(l => l.id == id);
-    if (l) l.active = false;
-    save(db);
+  async deleteLocation(id) {
+    await pool.query('UPDATE locations SET active=FALSE WHERE id=$1', [id]);
   },
-
-  clockIn(workerId, locationId, lat, lng) {
-    const db = load();
-    const entry = {
-      id: db.nextId.entries++,
-      worker_id: Number(workerId),
-      location_id: Number(locationId),
-      clock_in: now(),
-      clock_out: null,
-      clock_in_lat: lat || null,
-      clock_in_lng: lng || null,
-      clock_out_lat: null,
-      clock_out_lng: null,
-      duration_minutes: null,
-      notes: null
-    };
-    db.entries.push(entry);
-    save(db);
-    return { id: entry.id, clock_in: entry.clock_in };
+  async clockIn(workerId, locationId, lat, lng) {
+    const r = await pool.query(
+      'INSERT INTO time_entries (worker_id,location_id,clock_in,clock_in_lat,clock_in_lng) VALUES ($1,$2,NOW(),$3,$4) RETURNING id,clock_in',
+      [workerId, locationId, lat || null, lng || null]
+    );
+    return r.rows[0];
   },
-  clockOut(entryId, lat, lng, notes) {
-    const db = load();
-    const entry = db.entries.find(e => e.id == entryId);
-    if (!entry) return null;
-    const clockOut = now();
-    entry.clock_out = clockOut;
-    entry.clock_out_lat = lat || null;
-    entry.clock_out_lng = lng || null;
-    entry.duration_minutes = Math.round((new Date(clockOut) - new Date(entry.clock_in)) / 60000);
-    entry.notes = notes || null;
-    save(db);
-    return { id: entry.id, clock_out: clockOut, duration_minutes: entry.duration_minutes };
+  async clockOut(entryId, lat, lng, notes) {
+    const r = await pool.query(`
+      UPDATE time_entries SET
+        clock_out=NOW(),
+        clock_out_lat=$2,
+        clock_out_lng=$3,
+        duration_minutes=ROUND(EXTRACT(EPOCH FROM (NOW()-clock_in))/60),
+        notes=$4
+      WHERE id=$1
+      RETURNING id,clock_out,duration_minutes
+    `, [entryId, lat || null, lng || null, notes || null]);
+    return r.rows[0];
   },
-  getCurrentEntry(workerId) {
-    const db = load();
-    const entry = db.entries.find(e => e.worker_id == workerId && !e.clock_out);
-    if (!entry) return null;
-    const loc = db.locations.find(l => l.id === entry.location_id);
-    return { ...entry, location_name: loc ? loc.name : 'Unknown' };
+  async getCurrentEntry(workerId) {
+    const r = await pool.query(`
+      SELECT te.*,l.name as location_name
+      FROM time_entries te
+      JOIN locations l ON te.location_id=l.id
+      WHERE te.worker_id=$1 AND te.clock_out IS NULL
+    `, [workerId]);
+    return r.rows[0] || null;
   },
-  getActiveEntries() {
-    const db = load();
-    return db.entries
-      .filter(e => !e.clock_out)
-      .map(e => {
-        const worker = db.workers.find(w => w.id === e.worker_id);
-        const loc    = db.locations.find(l => l.id === e.location_id);
-        return { ...e, worker_name: worker ? worker.name : 'Unknown', location_name: loc ? loc.name : 'Unknown' };
-      })
-      .sort((a, b) => a.clock_in.localeCompare(b.clock_in));
+  async getActiveEntries() {
+    const r = await pool.query(`
+      SELECT te.*,l.name as location_name,w.name as worker_name
+      FROM time_entries te
+      JOIN locations l ON te.location_id=l.id
+      JOIN workers w ON te.worker_id=w.id
+      WHERE te.clock_out IS NULL
+      ORDER BY te.clock_in
+    `);
+    return r.rows;
   },
-  getWorkerEntries(workerId, startDate, endDate) {
-    const db = load();
-    let entries = db.entries.filter(e => e.worker_id == workerId);
-    if (startDate) entries = entries.filter(e => e.clock_in.slice(0, 10) >= startDate);
-    if (endDate)   entries = entries.filter(e => e.clock_in.slice(0, 10) <= endDate);
-    return entries
-      .sort((a, b) => b.clock_in.localeCompare(a.clock_in))
-      .slice(0, 100)
-      .map(e => {
-        const loc = db.locations.find(l => l.id === e.location_id);
-        return { ...e, location_name: loc ? loc.name : 'Unknown' };
-      });
+  async getWorkerEntries(workerId, startDate, endDate) {
+    let q = `
+      SELECT te.*,l.name as location_name
+      FROM time_entries te
+      JOIN locations l ON te.location_id=l.id
+      WHERE te.worker_id=$1
+    `;
+    const p = [workerId]; let i = 2;
+    if (startDate) { q += ` AND te.clock_in::date>=$${i++}`; p.push(startDate); }
+    if (endDate)   { q += ` AND te.clock_in::date<=$${i++}`; p.push(endDate); }
+    q += ' ORDER BY te.clock_in DESC LIMIT 100';
+    const r = await pool.query(q, p);
+    return r.rows;
   },
-  getAllEntries({ workerId, locationId, startDate, endDate }) {
-    const db = load();
-    let entries = [...db.entries];
-    if (workerId)   entries = entries.filter(e => e.worker_id == workerId);
-    if (locationId) entries = entries.filter(e => e.location_id == locationId);
-    if (startDate)  entries = entries.filter(e => e.clock_in.slice(0, 10) >= startDate);
-    if (endDate)    entries = entries.filter(e => e.clock_in.slice(0, 10) <= endDate);
-    return entries
-      .sort((a, b) => b.clock_in.localeCompare(a.clock_in))
-      .map(e => {
-        const worker = db.workers.find(w => w.id === e.worker_id);
-        const loc    = db.locations.find(l => l.id === e.location_id);
-        return { ...e, worker_name: worker ? worker.name : 'Unknown', location_name: loc ? loc.name : 'Unknown' };
-      });
+  async getAllEntries({ workerId, locationId, startDate, endDate }) {
+    let q = `
+      SELECT te.*,l.name as location_name,w.name as worker_name
+      FROM time_entries te
+      JOIN locations l ON te.location_id=l.id
+      JOIN workers w ON te.worker_id=w.id
+      WHERE 1=1
+    `;
+    const p = []; let i = 1;
+    if (workerId)   { q += ` AND te.worker_id=$${i++}`;       p.push(workerId); }
+    if (locationId) { q += ` AND te.location_id=$${i++}`;     p.push(locationId); }
+    if (startDate)  { q += ` AND te.clock_in::date>=$${i++}`; p.push(startDate); }
+    if (endDate)    { q += ` AND te.clock_in::date<=$${i++}`; p.push(endDate); }
+    q += ' ORDER BY te.clock_in DESC';
+    const r = await pool.query(q, p);
+    return r.rows;
   },
-  getStats() {
-    const db = load();
-    const today   = new Date().toISOString().slice(0, 10);
-    const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
-    const totalWorkers = db.workers.filter(w => w.active).length;
-    const clockedIn    = db.entries.filter(e => !e.clock_out).length;
-    const todayMin     = db.entries.filter(e => e.clock_in.slice(0,10) === today && e.duration_minutes).reduce((s,e) => s + e.duration_minutes, 0);
-    const weekMin      = db.entries.filter(e => e.clock_in.slice(0,10) >= weekAgo && e.duration_minutes).reduce((s,e) => s + e.duration_minutes, 0);
+  async getStats() {
+    const [w, a, t, wk] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM workers WHERE active=TRUE'),
+      pool.query('SELECT COUNT(*) FROM time_entries WHERE clock_out IS NULL'),
+      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date=CURRENT_DATE AND duration_minutes IS NOT NULL"),
+      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date>=CURRENT_DATE-6 AND duration_minutes IS NOT NULL"),
+    ]);
     return {
-      totalWorkers,
-      clockedIn,
-      todayHours: +(todayMin / 60).toFixed(1),
-      weekHours:  +(weekMin  / 60).toFixed(1),
+      totalWorkers: parseInt(w.rows[0].count),
+      clockedIn:    parseInt(a.rows[0].count),
+      todayHours:   +(parseInt(t.rows[0].total)  / 60).toFixed(1),
+      weekHours:    +(parseInt(wk.rows[0].total) / 60).toFixed(1),
     };
   },
 };
