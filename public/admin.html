@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>GreenTrack – Admin</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -114,12 +114,28 @@
         <h2>Workers</h2>
         <button class="btn btn-primary btn-sm" onclick="openModal('m-add-worker')">+ Add Worker</button>
       </div>
-      <div class="card mb-0" style="padding:0;overflow:hidden">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>PIN</th><th>Added</th><th>Actions</th></tr></thead>
-            <tbody id="workers-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
-          </table>
+      <div class="workers-grid">
+        <div class="card mb-0" style="padding:0;overflow:hidden">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>PIN</th><th>Added</th><th>Actions</th></tr></thead>
+              <tbody id="workers-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mb-0">
+          <div class="card-title">Add App to Phone</div>
+          <p style="font-size:.825rem;color:var(--gray-600);margin-bottom:.75rem">Share this link with workers so they can add GreenTrack to their home screen.</p>
+          <div style="display:flex;gap:.5rem;margin-bottom:.875rem">
+            <input id="app-url" class="form-control" readonly style="font-size:.75rem">
+            <button class="btn btn-outline btn-sm" onclick="copyAppUrl()" style="white-space:nowrap">Copy</button>
+          </div>
+          <div style="background:var(--gray-100);border-radius:var(--r-sm);padding:.65rem;font-size:.8rem;margin-bottom:.5rem;line-height:1.5">
+            <strong>📱 iPhone:</strong> Open link in Safari → tap Share ⬆ → "Add to Home Screen"
+          </div>
+          <div style="background:var(--gray-100);border-radius:var(--r-sm);padding:.65rem;font-size:.8rem;line-height:1.5">
+            <strong>🤖 Android:</strong> Open link in Chrome → tap Menu ⋮ → "Add to Home Screen"
+          </div>
         </div>
       </div>
     </div>
