@@ -1,12 +1,39 @@
 let worker = null;
 let currentEntry = null;
 let timerInterval = null;
+let deferredPrompt = null;
+
+// PWA install prompt (Android/Chrome)
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (!isInStandaloneMode()) show('install-banner');
+});
+window.addEventListener('appinstalled', () => hide('install-banner'));
+
+async function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  hide('install-banner');
+}
+
+function isIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isInStandaloneMode() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem('gt_worker');
   if (saved) { worker = JSON.parse(saved); showApp(); }
   document.getElementById('inp-pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
   document.getElementById('inp-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inp-pin').focus(); });
+  if (isIOS() && !isInStandaloneMode()) show('ios-banner');
 });
 
 async function login() {
