@@ -96,11 +96,13 @@ function showSpraySection(btn, section) {
 // ── Dashboard ─────────────────────────────────────
 
 async function loadStats() {
-  const s = await get('/api/admin/stats');
-  document.getElementById('st-workers').textContent = s.totalWorkers;
-  document.getElementById('st-active').textContent  = s.clockedIn;
-  document.getElementById('st-today').textContent   = s.todayHours + 'h';
-  document.getElementById('st-week').textContent    = s.weekHours + 'h';
+  try {
+    const s = await get('/api/admin/stats');
+    document.getElementById('st-workers').textContent = s.totalWorkers ?? '—';
+    document.getElementById('st-active').textContent  = s.clockedIn ?? '—';
+    document.getElementById('st-today').textContent   = s.todayHours != null ? s.todayHours + 'h' : '—';
+    document.getElementById('st-week').textContent    = s.weekHours  != null ? s.weekHours  + 'h' : '—';
+  } catch { ['st-workers','st-active','st-today','st-week'].forEach(id => document.getElementById(id).textContent = '—'); }
 }
 
 async function loadActive() {

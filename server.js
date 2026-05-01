@@ -196,10 +196,19 @@ app.get('/api/spray/upcoming', async (req, res) => {
   res.json(await db.getUpcomingJobs(workerId, days || 30));
 });
 
+function sundayStart() {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay());
+  return d.toISOString().split('T')[0];
+}
+
 // Admin
-app.get('/api/admin/stats', async (req, res) => res.json(await db.getStats()));
+app.get('/api/admin/stats', async (req, res) => {
+  try { res.json(await db.getStats(sundayStart())); }
+  catch (e) { console.error('Stats error:', e.message); res.json({ totalWorkers: 0, clockedIn: 0, todayHours: 0, weekHours: 0 }); }
+});
 app.get('/api/admin/active', async (req, res) => res.json(await db.getActiveEntries()));
-app.get('/api/admin/overtime', async (req, res) => res.json(await db.getWeeklyHoursByWorker()));
+app.get('/api/admin/overtime', async (req, res) => res.json(await db.getWeeklyHoursByWorker(sundayStart())));
 
 app.get('/api/admin/entries', async (req, res) => {
   const { workerId, locationId, startDate, endDate } = req.query;

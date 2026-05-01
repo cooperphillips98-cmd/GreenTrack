@@ -343,12 +343,12 @@ module.exports = {
     const r = await pool.query(q, p);
     return r.rows;
   },
-  async getStats() {
+  async getStats(weekStart) {
     const [w, a, t, wk] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM workers WHERE active=TRUE'),
       pool.query('SELECT COUNT(*) FROM time_entries WHERE clock_out IS NULL'),
       pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date=CURRENT_DATE AND duration_minutes IS NOT NULL"),
-      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date>=CURRENT_DATE-EXTRACT(DOW FROM CURRENT_DATE)::INTEGER AND duration_minutes IS NOT NULL"),
+      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date>=$1 AND duration_minutes IS NOT NULL", [weekStart]),
     ]);
     return {
       totalWorkers: parseInt(w.rows[0].count),
@@ -357,7 +357,7 @@ module.exports = {
       weekHours:    +(parseInt(wk.rows[0].total) / 60).toFixed(1),
     };
   },
-  async getWeeklyHoursByWorker() {
+  async getWeeklyHoursByWorker(weekStart) {
     const r = await pool.query(`
       SELECT w.id, w.name as worker_name,
         COALESCE(SUM(
@@ -368,11 +368,11 @@ module.exports = {
         ), 0)::integer as week_minutes
       FROM workers w
       LEFT JOIN time_entries te ON te.worker_id=w.id
-        AND te.clock_in::date >= CURRENT_DATE-EXTRACT(DOW FROM CURRENT_DATE)::INTEGER
+        AND te.clock_in::date >= $1
       WHERE w.active=TRUE
       GROUP BY w.id, w.name
       ORDER BY week_minutes DESC
-    `);
+    `, [weekStart]);
     return r.rows;
   },
   async getOvertimeChecks() {
