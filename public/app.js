@@ -98,9 +98,18 @@ function signOut() {
 async function showApp() {
   hide('login-section'); show('app-section');
   document.getElementById('hdr-name').textContent = worker.name;
-  // Show/hide spray tab based on permission
+
+  // Spray tab — only for workers with spray access
   const sprayNav = document.getElementById('nav-spray');
   if (sprayNav) sprayNav.classList.toggle('section-hidden', !worker.sprayAccess);
+
+  // Remove "Spray / Treatment" job type option for workers without spray access
+  if (!worker.sprayAccess) {
+    const opt = Array.from(document.querySelectorAll('#job-type option'))
+      .find(o => o.value === 'Spray / Treatment');
+    if (opt) opt.remove();
+  }
+
   await Promise.all([loadLocations(), loadClients(), loadProductsForJobForm()]);
   await refreshStatus();
   showWorkerTab('clock');
@@ -274,8 +283,14 @@ async function clockIn() {
   const productName = isSpray ? (prodSel.selectedOptions[0]?.text || '') : '';
   const productId = isSpray ? (prodSel.value || null) : null;
 
+  // Disable button and show GPS loading state
+  const startBtn = document.querySelector('#form-in .btn-success');
+  if (startBtn) { startBtn.disabled = true; startBtn.textContent = '📍 Getting location…'; }
+
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
+
+  if (startBtn) { startBtn.disabled = false; startBtn.textContent = '▶ Start Job'; }
 
   const r = await post('/api/entries/clock-in', { workerId: worker.id, locationId, latitude: lat, longitude: lng, jobType });
   if (!r.success) { showAlert(r.message || 'Failed to clock in.', 'error'); return; }
@@ -645,7 +660,7 @@ function urlBase64ToUint8Array(base64String) {
 function getGPS() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) { rej(); return; }
-    navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 });
+    navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 });
   });
 }
 function fmtElapsed(ms) {
