@@ -153,6 +153,7 @@ tr:hover td{background:var(--gray-50)}
   .container,.container-lg{padding:.75rem}
   .workers-grid{grid-template-columns:1fr}
   #spray-overview > div{grid-template-columns:1fr!important}
+  .charts-grid{grid-template-columns:1fr!important}
 }
 
 /* ── Job Cards ── */

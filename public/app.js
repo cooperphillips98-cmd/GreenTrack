@@ -156,6 +156,20 @@ async function loadProductsForJobForm() {
     `<option value="${p.id}" data-reapply-min="${p.reapply_min_days||''}" data-reapply-max="${p.reapply_max_days||''}">${esc(p.name)}</option>`));
 }
 
+function handleJobTypeSelect() {
+  const jobType = document.getElementById('job-type').value;
+  const isSpray = jobType === 'Spray / Treatment';
+  document.getElementById('spray-job-fields').classList.toggle('section-hidden', !isSpray);
+  if (!isSpray) {
+    document.getElementById('job-client').value = '';
+    document.getElementById('job-service').value = '';
+    document.getElementById('job-product').value = '';
+    document.getElementById('job-client-name').value = '';
+    document.getElementById('job-client-phone').value = '';
+    hide('new-client-wrap');
+  }
+}
+
 function handleClientSelect() {
   const sel = document.getElementById('job-client');
   if (sel.value === '__new__') {
@@ -220,8 +234,8 @@ function renderStatus() {
     hide('s-out'); show('s-in');
     hide('form-in'); show('form-out');
     const pendingJob = getPendingJob();
-    document.getElementById('s-client').textContent = pendingJob?.clientName || 'Working';
-    document.getElementById('s-service').textContent = pendingJob?.serviceType || '';
+    document.getElementById('s-client').textContent = pendingJob?.clientName || pendingJob?.jobType || 'Working';
+    document.getElementById('s-service').textContent = pendingJob?.clientName ? (pendingJob?.jobType || pendingJob?.serviceType || '') : (pendingJob?.serviceType || '');
     document.getElementById('s-loc').textContent = '📍 ' + currentEntry.location_name;
     document.getElementById('s-since').textContent = 'Since ' + fmtTime(currentEntry.clock_in);
     const start = new Date(currentEntry.clock_in).getTime();
@@ -240,27 +254,30 @@ function renderStatus() {
 async function clockIn() {
   const locationId = document.getElementById('loc-select').value;
   if (!locationId) { showAlert('Please select a job site.', 'error'); return; }
+  const jobType = document.getElementById('job-type').value;
+  if (!jobType) { showAlert('Please select a job type.', 'error'); return; }
 
-  // Collect optional job details
+  // Collect spray-specific details (only when Spray / Treatment is selected)
+  const isSpray = jobType === 'Spray / Treatment';
   const clientSel = document.getElementById('job-client');
-  const clientId = (clientSel.value && clientSel.value !== '__new__') ? clientSel.value : null;
-  const isNew = clientSel.value === '__new__';
+  const clientId = isSpray && clientSel.value && clientSel.value !== '__new__' ? clientSel.value : null;
+  const isNew = isSpray && clientSel.value === '__new__';
   const clientName = isNew
     ? document.getElementById('job-client-name').value.trim()
-    : (clientSel.selectedOptions[0]?.dataset.name || '');
+    : (isSpray ? (clientSel.selectedOptions[0]?.dataset.name || '') : '');
   const clientPhone = isNew
     ? document.getElementById('job-client-phone').value.trim()
-    : (clientSel.selectedOptions[0]?.dataset.phone || '');
-  const clientAddress = clientSel.selectedOptions[0]?.dataset.address || '';
-  const serviceType = document.getElementById('job-service').value;
+    : (isSpray ? (clientSel.selectedOptions[0]?.dataset.phone || '') : '');
+  const clientAddress = isSpray ? (clientSel.selectedOptions[0]?.dataset.address || '') : '';
+  const serviceType = isSpray ? document.getElementById('job-service').value : '';
   const prodSel = document.getElementById('job-product');
-  const productName = prodSel.selectedOptions[0]?.text || '';
-  const productId = prodSel.value || null;
+  const productName = isSpray ? (prodSel.selectedOptions[0]?.text || '') : '';
+  const productId = isSpray ? (prodSel.value || null) : null;
 
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
 
-  const r = await post('/api/entries/clock-in', { workerId: worker.id, locationId, latitude: lat, longitude: lng });
+  const r = await post('/api/entries/clock-in', { workerId: worker.id, locationId, latitude: lat, longitude: lng, jobType });
   if (!r.success) { showAlert(r.message || 'Failed to clock in.', 'error'); return; }
 
   // If new client name given, save the client
@@ -272,22 +289,25 @@ async function clockIn() {
     } catch {}
   }
 
-  // Persist pending job details for clock-out
-  if (clientName || serviceType || productName) {
-    localStorage.setItem('gt_pending_job', JSON.stringify({
-      clientId: savedClientId,
-      clientName,
-      clientPhone,
-      clientAddress,
-      serviceType,
-      productId,
-      productName,
-      locationId,
-    }));
-  }
+  // Always persist job info for clock-out
+  localStorage.setItem('gt_pending_job', JSON.stringify({
+    jobType,
+    clientId: savedClientId,
+    clientName,
+    clientPhone,
+    clientAddress,
+    serviceType,
+    productId,
+    productName,
+    locationId,
+  }));
+
+  // Reset job type selector
+  document.getElementById('job-type').value = '';
+  hide('spray-job-fields');
 
   await refreshStatus();
-  showAlert(clientName ? `Job started for ${clientName}!` : 'Job started!', 'success');
+  showAlert(clientName ? `Job started for ${clientName}!` : `${jobType} started!`, 'success');
 }
 
 function getPendingJob() {
@@ -328,51 +348,54 @@ async function clockOut() {
 // ── Jobs History Tab ──────────────────────────────
 
 async function loadJobs(all = false) {
-  const records = await get(`/api/spray/records?workerId=${worker.id}`);
+  let url = `/api/entries/worker/${worker.id}`;
+  if (!all) {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    url += '?startDate=' + d.toISOString().split('T')[0];
+  }
+  const entries = await get(url);
   const el = document.getElementById('jobs-list');
-  if (!records.length) {
+  if (!entries.length) {
     el.innerHTML = '<div class="table-empty">No jobs yet — start a job from the Clock tab</div>';
     return;
   }
-  const shown = all ? records : records.slice(0, 20);
-  const today = new Date(); today.setHours(0,0,0,0);
-  el.innerHTML = shown.map(r => {
-    const clientDisplay = r.client_name || r.location_name || 'General Work';
-    const initials = clientDisplay.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-    const dur = r.duration_minutes ? fmtDur(r.duration_minutes) : null;
-    const address = r.client_address || (r.location_name && r.client_name ? r.location_name : '');
-
-    let statusBadge = '';
-    if (r.next_service_date) {
-      const due = new Date(r.next_service_date + 'T12:00:00');
-      due.setHours(0,0,0,0);
-      const diff = Math.round((due - today) / 86400000);
-      statusBadge = diff < 0
-        ? `<span class="badge badge-overtime">Overdue</span>`
-        : diff <= 7
-          ? `<span class="badge badge-warning-hrs">Due Soon</span>`
-          : `<span class="badge badge-success">Upcoming</span>`;
-    }
-
+  el.innerHTML = entries.map(e => {
+    const jobType = e.job_type || 'General Work';
+    const initials = jobType.replace(/[^A-Za-z ]/g, '').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'JB';
+    const dur = e.duration_minutes ? fmtDur(e.duration_minutes) : null;
+    const isActive = !e.clock_out;
+    const col = jobTypeColor(jobType);
     return `<div class="job-card">
-      <div class="job-avatar">${esc(initials)}</div>
+      <div class="job-avatar" style="background:${col.bg};color:${col.text}">${esc(initials)}</div>
       <div class="job-card-body">
         <div class="job-card-top">
           <div>
-            <div class="job-card-name">${esc(clientDisplay)}</div>
-            ${address ? `<div class="job-card-addr">${esc(address)}</div>` : ''}
-            ${r.category ? `<div class="job-card-service" style="color:${serviceColor(r.category)}">${esc(r.category)}</div>` : ''}
+            <div class="job-card-name">${esc(jobType)}</div>
+            <div class="job-card-addr">📍 ${esc(e.location_name || 'Unknown location')}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            ${statusBadge}
+            ${isActive ? '<span class="badge badge-success">Active</span>' : ''}
             ${dur ? `<div class="job-card-dur">⏱ ${dur}</div>` : ''}
-            <div class="job-card-date">${fmtDate(r.applied_at)}</div>
+            <div class="job-card-date">${fmtDate(e.clock_in)}</div>
           </div>
         </div>
-        ${r.notes ? `<div class="job-card-notes">📝 ${esc(r.notes)}</div>` : ''}
+        ${e.notes ? `<div class="job-card-notes">📝 ${esc(e.notes)}</div>` : ''}
+        ${e.has_photo ? `<button class="btn btn-outline btn-sm" style="margin-top:.4rem;font-size:.72rem" onclick="viewPhoto(${e.id})">📷 View Photo</button>` : ''}
       </div>
     </div>`;
   }).join('');
+}
+
+function jobTypeColor(type) {
+  if (!type) return { bg: 'var(--gray-100)', text: 'var(--gray-500)' };
+  const t = type.toLowerCase();
+  if (t.includes('mow')) return { bg: '#d1fae5', text: '#065f46' };
+  if (t.includes('trim') || t.includes('edg')) return { bg: '#dbeafe', text: '#1e40af' };
+  if (t.includes('landscape') || t.includes('general')) return { bg: '#fef3c7', text: '#92400e' };
+  if (t.includes('cleanup') || t.includes('leaf')) return { bg: '#ede9fe', text: '#5b21b6' };
+  if (t.includes('irrig')) return { bg: '#e0f2fe', text: '#0c4a6e' };
+  if (t.includes('spray') || t.includes('treatment')) return { bg: '#fee2e2', text: '#991b1b' };
+  return { bg: 'var(--green-pale)', text: 'var(--green-dark)' };
 }
 
 function serviceColor(cat) {

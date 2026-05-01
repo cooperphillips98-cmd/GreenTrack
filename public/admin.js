@@ -6,6 +6,8 @@ let allUpcoming = [];
 let MAPBOX_TOKEN = null;
 let propertyMap = null;
 let drawnItems = null;
+let chartHours = null;
+let chartTypes = null;
 
 const ADMIN_SEASONAL = [
   { months: [0,1],   label: 'Winter',       tips: ['Dormant oil on trees & shrubs', 'Pre-emergent planning & ordering', 'Client follow-up calls', 'Equipment maintenance'] },
@@ -54,11 +56,11 @@ function adminSignOut() {
 async function showAdminApp() {
   hide('admin-login'); show('admin-app');
   try { const cfg = await get('/api/config'); MAPBOX_TOKEN = cfg.mapboxToken; } catch {}
-  await Promise.all([loadStats(), loadActive(), loadOvertime(), loadWorkers(), loadLocations(), loadClientsAdmin(), loadProductsAdmin()]);
+  await Promise.all([loadStats(), loadActive(), loadOvertime(), loadCharts(), loadWorkers(), loadLocations(), loadClientsAdmin(), loadProductsAdmin()]);
   setInterval(updateTimers, 1000);
   setInterval(() => {
     if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) {
-      loadStats(); loadActive(); loadOvertime();
+      loadStats(); loadActive(); loadOvertime(); loadCharts();
     }
   }, 30000);
 }
@@ -150,6 +152,79 @@ async function loadOvertime() {
       ${badge}
     </div>`;
   }).join('');
+}
+
+async function loadCharts() {
+  if (typeof Chart === 'undefined') return;
+  const d = new Date();
+  const startOfWeek = new Date(d);
+  startOfWeek.setDate(d.getDate() - d.getDay());
+  const startStr = startOfWeek.toISOString().split('T')[0];
+  const endStr = d.toISOString().split('T')[0];
+
+  let entries = [];
+  try { entries = await get(`/api/admin/entries?startDate=${startStr}&endDate=${endStr}`); } catch {}
+
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayHours = Array(7).fill(0);
+  const typeMap = {};
+
+  entries.forEach(e => {
+    if (e.duration_minutes) {
+      dayHours[new Date(e.clock_in).getDay()] += e.duration_minutes / 60;
+    }
+    const jt = e.job_type || 'Other';
+    typeMap[jt] = (typeMap[jt] || 0) + 1;
+  });
+
+  const COLORS = ['#52b788','#2d6a4f','#74c69d','#d97706','#3b82f6','#8b5cf6','#dc2626','#ec4899'];
+
+  // Hours bar chart
+  const ctxH = document.getElementById('chart-hours');
+  if (ctxH) {
+    if (chartHours) chartHours.destroy();
+    chartHours = new Chart(ctxH, {
+      type: 'bar',
+      data: {
+        labels: DAYS,
+        datasets: [{ label: 'Hours', data: dayHours.map(h => +h.toFixed(1)), backgroundColor: '#52b788', borderRadius: 6, borderSkipped: false }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: v => v + 'h' }, grid: { color: '#f3f4f6' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Job type doughnut chart
+  const ctxT = document.getElementById('chart-types');
+  const emptyEl = document.getElementById('chart-types-empty');
+  if (ctxT) {
+    if (chartTypes) chartTypes.destroy();
+    const types = Object.keys(typeMap);
+    if (!types.length) {
+      ctxT.style.display = 'none';
+      if (emptyEl) emptyEl.classList.remove('section-hidden');
+    } else {
+      ctxT.style.display = '';
+      if (emptyEl) emptyEl.classList.add('section-hidden');
+      chartTypes = new Chart(ctxT, {
+        type: 'doughnut',
+        data: {
+          labels: types,
+          datasets: [{ data: types.map(t => typeMap[t]), backgroundColor: COLORS.slice(0, types.length), borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 8 } } }
+        }
+      });
+    }
+  }
 }
 
 async function forceClockOut(id, name) {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#1b4332">
@@ -89,40 +89,57 @@
         </select>
       </div>
 
-      <div class="job-details-divider">
-        <span>Job Details <span class="text-muted" style="font-weight:400;font-size:.75rem">(optional)</span></span>
-      </div>
-
       <div class="form-group">
-        <label class="form-label">Client</label>
-        <select id="job-client" class="form-control" onchange="handleClientSelect()">
-          <option value="">— Select or skip —</option>
-          <option value="__new__">+ New client…</option>
-        </select>
-      </div>
-      <div id="new-client-wrap" class="section-hidden" style="margin-top:-.4rem;margin-bottom:.875rem">
-        <input id="job-client-name" type="text" class="form-control" placeholder="Client full name" style="margin-bottom:.4rem">
-        <input id="job-client-phone" type="tel" class="form-control" placeholder="Phone (optional)">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Service Type</label>
-        <select id="job-service" class="form-control" onchange="suggestProduct()">
-          <option value="">— Select service —</option>
-          <option>Weed Control</option>
-          <option>Fertilizer</option>
-          <option>Pest Control</option>
-          <option>Pre-emergent</option>
-          <option>Fungicide</option>
-          <option>Custom</option>
+        <label class="form-label">Job Type <span style="color:var(--red)">*</span></label>
+        <select id="job-type" class="form-control" onchange="handleJobTypeSelect()">
+          <option value="">— What are you doing today? —</option>
+          <option>Mowing</option>
+          <option>Trimming / Edging</option>
+          <option>General Landscaping</option>
+          <option>Cleanup / Leaf Removal</option>
+          <option>Irrigation</option>
+          <option>Spray / Treatment</option>
+          <option>Other</option>
         </select>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Product</label>
-        <select id="job-product" class="form-control">
-          <option value="">— Select product (optional) —</option>
-        </select>
+      <!-- Spray-specific details — only visible when "Spray / Treatment" is selected -->
+      <div id="spray-job-fields" class="section-hidden">
+        <div class="job-details-divider">
+          <span>Treatment Details <span class="text-muted" style="font-weight:400;font-size:.75rem">(optional)</span></span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Client</label>
+          <select id="job-client" class="form-control" onchange="handleClientSelect()">
+            <option value="">— Select or skip —</option>
+            <option value="__new__">+ New client…</option>
+          </select>
+        </div>
+        <div id="new-client-wrap" class="section-hidden" style="margin-top:-.4rem;margin-bottom:.875rem">
+          <input id="job-client-name" type="text" class="form-control" placeholder="Client full name" style="margin-bottom:.4rem">
+          <input id="job-client-phone" type="tel" class="form-control" placeholder="Phone (optional)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Service Type</label>
+          <select id="job-service" class="form-control" onchange="suggestProduct()">
+            <option value="">— Select service —</option>
+            <option>Weed Control</option>
+            <option>Fertilizer</option>
+            <option>Pest Control</option>
+            <option>Pre-emergent</option>
+            <option>Fungicide</option>
+            <option>Custom</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Product</label>
+          <select id="job-product" class="form-control">
+            <option value="">— Select product (optional) —</option>
+          </select>
+        </div>
       </div>
 
       <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Start Job</button>

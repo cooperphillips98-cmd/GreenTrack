@@ -95,7 +95,7 @@ app.get('/api/locations', async (req, res) => res.json(await db.getLocations()))
 
 // Time Entries
 app.post('/api/entries/clock-in', async (req, res) => {
-  const { workerId, locationId, latitude, longitude } = req.body;
+  const { workerId, locationId, latitude, longitude, jobType } = req.body;
   if (!workerId || !locationId) return res.status(400).json({ success: false, message: 'Missing required fields.' });
   if (await db.getCurrentEntry(workerId)) return res.status(400).json({ success: false, message: 'Already clocked in.' });
 
@@ -118,7 +118,7 @@ app.post('/api/entries/clock-in', async (req, res) => {
     }
   }
 
-  const entry = await db.clockIn(workerId, locationId, latitude, longitude);
+  const entry = await db.clockIn(workerId, locationId, latitude, longitude, jobType || null);
   res.json({ success: true, entry });
 });
 

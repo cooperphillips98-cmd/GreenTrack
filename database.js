@@ -64,6 +64,7 @@ async function init() {
     ALTER TABLE workers ADD COLUMN IF NOT EXISTS spray_access BOOLEAN DEFAULT FALSE;
     ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS photo TEXT;
     ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS notified_overtime BOOLEAN DEFAULT FALSE;
+    ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS job_type TEXT;
     CREATE TABLE IF NOT EXISTS spray_records (
       id SERIAL PRIMARY KEY,
       worker_id INTEGER REFERENCES workers(id),
@@ -264,10 +265,10 @@ module.exports = {
   },
 
   // Time Entries
-  async clockIn(workerId, locationId, lat, lng) {
+  async clockIn(workerId, locationId, lat, lng, jobType) {
     const r = await pool.query(
-      'INSERT INTO time_entries (worker_id,location_id,clock_in,clock_in_lat,clock_in_lng) VALUES ($1,$2,NOW(),$3,$4) RETURNING id,clock_in',
-      [workerId, locationId, lat || null, lng || null]
+      'INSERT INTO time_entries (worker_id,location_id,clock_in,clock_in_lat,clock_in_lng,job_type) VALUES ($1,$2,NOW(),$3,$4,$5) RETURNING id,clock_in',
+      [workerId, locationId, lat || null, lng || null, jobType || null]
     );
     return r.rows[0];
   },
@@ -313,7 +314,7 @@ module.exports = {
     let q = `
       SELECT te.id,te.worker_id,te.location_id,te.clock_in,te.clock_out,
              te.duration_minutes,te.notes,(te.photo IS NOT NULL) as has_photo,
-             l.name as location_name
+             te.job_type,l.name as location_name
       FROM time_entries te
       JOIN locations l ON te.location_id=l.id
       WHERE te.worker_id=$1
@@ -347,7 +348,7 @@ module.exports = {
       pool.query('SELECT COUNT(*) FROM workers WHERE active=TRUE'),
       pool.query('SELECT COUNT(*) FROM time_entries WHERE clock_out IS NULL'),
       pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date=CURRENT_DATE AND duration_minutes IS NOT NULL"),
-      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date>=CURRENT_DATE-6 AND duration_minutes IS NOT NULL"),
+      pool.query("SELECT COALESCE(SUM(duration_minutes),0) as total FROM time_entries WHERE clock_in::date>=CURRENT_DATE-EXTRACT(DOW FROM CURRENT_DATE)::INTEGER AND duration_minutes IS NOT NULL"),
     ]);
     return {
       totalWorkers: parseInt(w.rows[0].count),
@@ -367,7 +368,7 @@ module.exports = {
         ), 0)::integer as week_minutes
       FROM workers w
       LEFT JOIN time_entries te ON te.worker_id=w.id
-        AND te.clock_in >= date_trunc('week', CURRENT_TIMESTAMP)
+        AND te.clock_in::date >= CURRENT_DATE-EXTRACT(DOW FROM CURRENT_DATE)::INTEGER
       WHERE w.active=TRUE
       GROUP BY w.id, w.name
       ORDER BY week_minutes DESC
