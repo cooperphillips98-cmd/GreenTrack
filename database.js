@@ -28,6 +28,7 @@ async function init() {
     ALTER TABLE locations ADD COLUMN IF NOT EXISTS geofence_lat REAL;
     ALTER TABLE locations ADD COLUMN IF NOT EXISTS geofence_lng REAL;
     ALTER TABLE locations ADD COLUMN IF NOT EXISTS geofence_radius INTEGER DEFAULT 150;
+    ALTER TABLE locations ADD COLUMN IF NOT EXISTS polygon JSONB;
     CREATE TABLE IF NOT EXISTS time_entries (
       id SERIAL PRIMARY KEY,
       worker_id INTEGER REFERENCES workers(id),
@@ -99,6 +100,12 @@ module.exports = {
     await pool.query(
       'UPDATE locations SET geofence_lat=$1, geofence_lng=$2, geofence_radius=$3 WHERE id=$4',
       [lat || null, lng || null, radius || 150, id]
+    );
+  },
+  async setLocationPolygon(id, polygon) {
+    await pool.query(
+      'UPDATE locations SET polygon=$1 WHERE id=$2',
+      [polygon ? JSON.stringify(polygon) : null, id]
     );
   },
   async clockIn(workerId, locationId, lat, lng) {

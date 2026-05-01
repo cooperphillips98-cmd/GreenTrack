@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>GreenTrack – Admin</title>
   <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
 </head>
 <body>
 
@@ -266,6 +268,27 @@
   </div>
 </div>
 
+<!-- MODAL: Property Map -->
+<div id="m-property-map" class="modal-overlay" style="padding:.5rem;align-items:stretch">
+  <div class="modal" style="width:100%;max-width:960px;height:92vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+    <div style="padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--gray-200);flex-shrink:0">
+      <div>
+        <div class="card-title" style="margin:0">Property Lines – <span id="map-loc-name"></span></div>
+        <div style="font-size:.78rem;color:var(--gray-500);margin-top:.2rem">Click the polygon tool (pentagon icon) on the left → click each corner of the property → double-click to finish.</div>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-shrink:0">
+        <button class="btn btn-outline btn-sm" onclick="clearMapPolygon()">Clear</button>
+        <button class="btn btn-primary btn-sm" onclick="savePolygon()">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeMapModal()">✕</button>
+      </div>
+    </div>
+    <div id="property-map" style="flex:1;width:100%;min-height:0"></div>
+    <input type="hidden" id="map-loc-id">
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>

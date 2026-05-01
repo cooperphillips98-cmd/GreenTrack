@@ -1,5 +1,9 @@
 let allEntries = [];
 let activeWorkers = [];
+let allLocations = [];
+let propertyMap = null;
+let drawnItems = null;
+let MAPBOX_TOKEN = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('gt_admin') === 'true') showAdminApp();
@@ -39,6 +43,8 @@ function adminSignOut() {
 
 async function showAdminApp() {
   hide('admin-login'); show('admin-app');
+  const cfg = await get('/api/config');
+  MAPBOX_TOKEN = cfg.mapboxToken;
   await Promise.all([loadStats(), loadActive(), loadWorkers(), loadLocations()]);
   setInterval(updateTimers, 1000);
   setInterval(() => { if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) { loadStats(); loadActive(); } }, 30000);
@@ -115,27 +121,103 @@ async function loadWorkers() {
 
 async function loadLocations() {
   const locs = await get('/api/locations');
+  allLocations = locs;
   const fSel = document.getElementById('f-location');
   fSel.innerHTML = '<option value="">All Locations</option>' +
     locs.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   const tbody = document.getElementById('locations-tbody');
   if (!locs.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No locations yet</td></tr>'; return; }
   tbody.innerHTML = locs.map(l => {
+    const hasPolygon = l.polygon && l.polygon.length >= 3;
     const hasGeofence = l.geofence_lat && l.geofence_lng;
-    const geofenceBadge = hasGeofence
-      ? `<span class="badge badge-success">✓ ${l.geofence_radius || 150}m radius</span>`
-      : `<span class="text-muted">Not set</span>`;
+    const geofenceBadge = hasPolygon
+      ? `<span class="badge badge-success">✓ Property lines set</span>`
+      : hasGeofence
+        ? `<span class="badge badge-success">✓ ${l.geofence_radius || 150}m radius</span>`
+        : `<span class="text-muted">Not set</span>`;
     return `<tr>
       <td><strong>${esc(l.name)}</strong></td>
       <td>${l.address ? esc(l.address) : '<span class="text-muted">—</span>'}</td>
       <td>${geofenceBadge}</td>
       <td>${fmtDate(l.created_at)}</td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick="openGeofenceModal(${l.id},'${esc(l.name)}',${l.geofence_lat || 'null'},${l.geofence_lng || 'null'},${l.geofence_radius || 150})">📍 Geofence</button>
+        <button class="btn btn-outline btn-sm" onclick="openMapModal(${l.id})">🗺 Draw Property</button>
+        <button class="btn btn-outline btn-sm" onclick="openGeofenceModal(${l.id},'${esc(l.name)}',${l.geofence_lat || 'null'},${l.geofence_lng || 'null'},${l.geofence_radius || 150})">📍 Radius</button>
         <button class="btn btn-danger btn-sm" onclick="removeLocation(${l.id},'${esc(l.name)}')">Remove</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+function openMapModal(id) {
+  const loc = allLocations.find(l => l.id === id);
+  if (!loc) return;
+  document.getElementById('map-loc-id').value = id;
+  document.getElementById('map-loc-name').textContent = loc.name;
+  document.getElementById('m-property-map').classList.add('open');
+
+  setTimeout(() => {
+    if (propertyMap) { propertyMap.remove(); propertyMap = null; }
+
+    const center = loc.geofence_lat && loc.geofence_lng
+      ? [loc.geofence_lat, loc.geofence_lng]
+      : [39.5, -98.35];
+    const zoom = loc.geofence_lat ? 19 : 4;
+
+    propertyMap = L.map('property-map').setView(center, zoom);
+
+    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`, {
+      attribution: '© <a href="https://www.mapbox.com/">Mapbox</a>',
+      maxZoom: 22,
+      tileSize: 256,
+    }).addTo(propertyMap);
+
+    drawnItems = new L.FeatureGroup();
+    propertyMap.addLayer(drawnItems);
+
+    if (loc.polygon && loc.polygon.length >= 3) {
+      const poly = L.polygon(loc.polygon, { color: '#1f8f3a', fillOpacity: 0.25 });
+      drawnItems.addLayer(poly);
+      propertyMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+    }
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        polygon: { shapeOptions: { color: '#1f8f3a', fillOpacity: 0.25 }, allowIntersection: false },
+        polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
+      },
+      edit: { featureGroup: drawnItems },
+    });
+    propertyMap.addControl(drawControl);
+
+    propertyMap.on(L.Draw.Event.CREATED, e => {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(e.layer);
+    });
+  }, 150);
+}
+
+function closeMapModal() {
+  document.getElementById('m-property-map').classList.remove('open');
+  if (propertyMap) { propertyMap.remove(); propertyMap = null; }
+}
+
+function clearMapPolygon() {
+  if (drawnItems) drawnItems.clearLayers();
+}
+
+async function savePolygon() {
+  const id = document.getElementById('map-loc-id').value;
+  let polygon = null;
+  drawnItems.eachLayer(layer => {
+    if (layer instanceof L.Polygon) {
+      polygon = layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+    }
+  });
+  await put(`/api/admin/locations/${id}/polygon`, { polygon });
+  closeMapModal();
+  loadLocations();
+  showAlert(polygon ? 'Property boundary saved.' : 'Property boundary cleared.', 'success');
 }
 
 function openGeofenceModal(id, name, lat, lng, radius) {

@@ -14,6 +14,17 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+function pointInPolygon(lat, lng, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i];
+    const [yj, xj] = polygon[j];
+    const intersect = ((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/api/auth/login', async (req, res) => {
@@ -36,6 +47,10 @@ app.post('/api/admin/auth', async (req, res) => {
   }
 });
 
+app.get('/api/config', (req, res) => {
+  res.json({ mapboxToken: process.env.MAPBOX_TOKEN || '' });
+});
+
 app.get('/api/locations', async (req, res) => res.json(await db.getLocations()));
 
 app.post('/api/entries/clock-in', async (req, res) => {
@@ -44,7 +59,14 @@ app.post('/api/entries/clock-in', async (req, res) => {
   if (await db.getCurrentEntry(workerId)) return res.status(400).json({ success: false, message: 'Already clocked in.' });
 
   const location = await db.getLocationById(locationId);
-  if (location && location.geofence_lat && location.geofence_lng) {
+  if (location && location.polygon && location.polygon.length >= 3) {
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ success: false, message: 'This location requires GPS verification. Please allow location access and try again.' });
+    }
+    if (!pointInPolygon(latitude, longitude, location.polygon)) {
+      return res.status(400).json({ success: false, message: `You are outside the property boundary for ${location.name}. Move to the job site and try again.` });
+    }
+  } else if (location && location.geofence_lat && location.geofence_lng) {
     if (latitude == null || longitude == null) {
       return res.status(400).json({ success: false, message: 'This location requires GPS verification. Please allow location access and try again.' });
     }
@@ -121,6 +143,12 @@ app.post('/api/admin/locations', async (req, res) => {
 app.put('/api/admin/locations/:id', async (req, res) => {
   const { geofence_lat, geofence_lng, geofence_radius } = req.body;
   await db.setLocationGeofence(req.params.id, geofence_lat, geofence_lng, geofence_radius);
+  res.json({ success: true });
+});
+
+app.put('/api/admin/locations/:id/polygon', async (req, res) => {
+  const { polygon } = req.body;
+  await db.setLocationPolygon(req.params.id, polygon);
   res.json({ success: true });
 });
 
