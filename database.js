@@ -87,6 +87,8 @@ async function init() {
     ALTER TABLE spray_records ADD COLUMN IF NOT EXISTS client_address TEXT;
     ALTER TABLE spray_records ADD COLUMN IF NOT EXISTS next_service_date DATE;
     ALTER TABLE spray_records ADD COLUMN IF NOT EXISTS time_entry_id INTEGER REFERENCES time_entries(id);
+    ALTER TABLE spray_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed';
+    ALTER TABLE spray_records ADD COLUMN IF NOT EXISTS scheduled_date DATE;
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id SERIAL PRIMARY KEY,
       worker_id INTEGER REFERENCES workers(id),
@@ -457,6 +459,64 @@ module.exports = {
         AND sr.next_service_date <= CURRENT_DATE + $2
       ORDER BY sr.next_service_date ASC
     `, [workerId, days]);
+    return r.rows;
+  },
+
+  async createSprayScheduleJob({ clientId, clientName, clientPhone, clientAddress, product, category, scheduledDate, workerId, notes }) {
+    const r = await pool.query(`
+      INSERT INTO spray_records
+        (worker_id,client_id,client_name,client_phone,client_address,product,category,scheduled_date,notes,status,applied_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'scheduled',NOW())
+      RETURNING *
+    `, [workerId||null, clientId||null, clientName||null, clientPhone||null, clientAddress||null,
+        product||'TBD', category||null, scheduledDate||null, notes||null]);
+    return r.rows[0];
+  },
+  async updateSprayStatus(id, status) {
+    const extra = status === 'completed' ? ', applied_at=NOW()' : '';
+    await pool.query(`UPDATE spray_records SET status=$1${extra} WHERE id=$2`, [status, id]);
+  },
+  async getSpraySchedule({ status, workerId } = {}) {
+    let q = `
+      SELECT sr.*,l.name as location_name,w.name as worker_name
+      FROM spray_records sr
+      LEFT JOIN locations l ON sr.location_id=l.id
+      LEFT JOIN workers w ON sr.worker_id=w.id
+      WHERE 1=1
+    `;
+    const p = []; let i = 1;
+    if (status === 'overdue') {
+      q += ` AND sr.status='scheduled' AND sr.scheduled_date < CURRENT_DATE`;
+    } else if (status === 'today') {
+      q += ` AND sr.status='scheduled' AND sr.scheduled_date = CURRENT_DATE`;
+    } else if (status === 'week') {
+      q += ` AND sr.status='scheduled' AND sr.scheduled_date <= CURRENT_DATE + 7 AND sr.scheduled_date >= CURRENT_DATE`;
+    } else if (status) {
+      q += ` AND sr.status=$${i++}`; p.push(status);
+    }
+    if (workerId) { q += ` AND sr.worker_id=$${i++}`; p.push(workerId); }
+    q += ' ORDER BY COALESCE(sr.scheduled_date, sr.applied_at) DESC';
+    const r = await pool.query(q, p);
+    return r.rows;
+  },
+  async getSprayReminders() {
+    const [td, wk, ov] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM spray_records WHERE status='scheduled' AND scheduled_date=CURRENT_DATE`),
+      pool.query(`SELECT COUNT(*) FROM spray_records WHERE status='scheduled' AND scheduled_date>CURRENT_DATE AND scheduled_date<=CURRENT_DATE+7`),
+      pool.query(`SELECT COUNT(*) FROM spray_records WHERE status='scheduled' AND scheduled_date<CURRENT_DATE`),
+    ]);
+    return { today: parseInt(td.rows[0].count), week: parseInt(wk.rows[0].count), overdue: parseInt(ov.rows[0].count) };
+  },
+  async getClientHistory(clientId) {
+    const r = await pool.query(`
+      SELECT sr.*,l.name as location_name,w.name as worker_name
+      FROM spray_records sr
+      LEFT JOIN locations l ON sr.location_id=l.id
+      LEFT JOIN workers w ON sr.worker_id=w.id
+      WHERE sr.client_id=$1
+      ORDER BY COALESCE(sr.applied_at, sr.created_at) DESC
+      LIMIT 50
+    `, [clientId]);
     return r.rows;
   },
 

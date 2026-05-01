@@ -276,6 +276,32 @@ app.get('/api/admin/spray', async (req, res) => {
   res.json(await db.getAllSprayRecords({ workerId, locationId, clientId, startDate, endDate, upcoming: upcoming === 'true' }));
 });
 
+app.get('/api/admin/spray/reminders', async (req, res) => {
+  try { res.json(await db.getSprayReminders()); }
+  catch { res.json({ today: 0, week: 0, overdue: 0 }); }
+});
+
+app.get('/api/admin/spray/schedule', async (req, res) => {
+  const { status, workerId } = req.query;
+  res.json(await db.getSpraySchedule({ status, workerId }));
+});
+
+app.post('/api/admin/spray/schedule', async (req, res) => {
+  const { clientId, clientName, clientPhone, clientAddress, product, category, scheduledDate, workerId, notes } = req.body;
+  if (!clientName && !clientId) return res.status(400).json({ success: false, message: 'Client required.' });
+  const record = await db.createSprayScheduleJob({ clientId, clientName, clientPhone, clientAddress, product, category, scheduledDate, workerId, notes });
+  res.json({ success: true, record });
+});
+
+app.put('/api/admin/spray/:id/status', async (req, res) => {
+  await db.updateSprayStatus(req.params.id, req.body.status);
+  res.json({ success: true });
+});
+
+app.get('/api/clients/:id/history', async (req, res) => {
+  res.json(await db.getClientHistory(req.params.id));
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
