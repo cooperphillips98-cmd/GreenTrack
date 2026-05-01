@@ -56,7 +56,7 @@ function adminSignOut() {
 async function showAdminApp() {
   hide('admin-login'); show('admin-app');
   try { const cfg = await get('/api/config'); MAPBOX_TOKEN = cfg.mapboxToken; } catch {}
-  await Promise.all([loadStats(), loadActive(), loadOvertime(), loadCharts(), loadWorkers(), loadLocations(), loadClientsAdmin(), loadProductsAdmin()]);
+  await Promise.allSettled([loadStats(), loadActive(), loadOvertime(), loadCharts(), loadWorkers(), loadLocations(), loadClientsAdmin(), loadProductsAdmin()]);
   setInterval(updateTimers, 1000);
   setInterval(() => {
     if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) {
@@ -69,7 +69,7 @@ async function showAdminApp() {
 
 function showTab(btn, tab) {
   ['dashboard','entries','spraying','workers','locations','settings'].forEach(t => {
-    document.getElementById('tab-' + t).classList.add('section-hidden');
+    const el = document.getElementById('tab-' + t); if (el) el.classList.add('section-hidden');
   });
   document.querySelectorAll('.admin-nav > .nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.remove('section-hidden');
@@ -82,7 +82,7 @@ function showTab(btn, tab) {
 
 function showSpraySection(btn, section) {
   ['spray-overview','spray-add-job','spray-jobs','spray-clients','spray-products','spray-followups'].forEach(s => {
-    document.getElementById(s).classList.add('section-hidden');
+    const el = document.getElementById(s); if (el) el.classList.add('section-hidden');
   });
   document.querySelectorAll('#tab-spraying .admin-nav .nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(section).classList.remove('section-hidden');
