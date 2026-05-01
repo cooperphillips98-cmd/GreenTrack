@@ -81,16 +81,77 @@ function showTab(btn, tab) {
 // ── Spray Sub-Nav ─────────────────────────────────
 
 function showSpraySection(btn, section) {
-  ['spray-overview','spray-jobs','spray-clients','spray-products'].forEach(s => {
+  ['spray-overview','spray-add-job','spray-jobs','spray-clients','spray-products','spray-followups'].forEach(s => {
     document.getElementById(s).classList.add('section-hidden');
   });
   document.querySelectorAll('#tab-spraying .admin-nav .nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(section).classList.remove('section-hidden');
   btn.classList.add('active');
   if (section === 'spray-overview')  { renderAdminSeasonal(); loadAdminUpcoming(); }
+  if (section === 'spray-add-job')   { const d = document.getElementById('aj-date'); if (d && !d.value) d.value = today(); }
   if (section === 'spray-jobs')      loadSprayJobs();
   if (section === 'spray-clients')   loadClientsAdmin();
   if (section === 'spray-products')  loadProductsAdmin();
+  if (section === 'spray-followups') loadFollowUps();
+}
+
+async function addSprayJob() {
+  const workerId      = document.getElementById('aj-worker').value;
+  const clientName    = document.getElementById('aj-client-name').value.trim();
+  const clientPhone   = document.getElementById('aj-client-phone').value.trim();
+  const clientAddress = document.getElementById('aj-address').value.trim();
+  const category      = document.getElementById('aj-service').value;
+  const product       = document.getElementById('aj-product').value.trim();
+  const dateVal       = document.getElementById('aj-date').value;
+  const startTime     = document.getElementById('aj-start-time').value;
+  const nextServiceDate = document.getElementById('aj-next-date').value || null;
+  const notes         = document.getElementById('aj-notes').value.trim();
+
+  if (!workerId) { showAlert('Please select an employee.', 'error'); return; }
+  if (!category) { showAlert('Please select a service type.', 'error'); return; }
+  if (!product)  { showAlert('Please enter a product name.', 'error'); return; }
+
+  const appliedAt = dateVal
+    ? (startTime ? new Date(`${dateVal}T${startTime}`).toISOString() : new Date(dateVal + 'T12:00:00').toISOString())
+    : new Date().toISOString();
+
+  const r = await post('/api/spray/records', {
+    workerId, clientName, clientPhone, clientAddress, product, category, appliedAt, notes, nextServiceDate
+  });
+
+  if (r.success) {
+    ['aj-client-name','aj-client-phone','aj-address','aj-product','aj-start-time','aj-end-time','aj-next-date','aj-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('aj-service').value = '';
+    document.getElementById('aj-worker').value = '';
+    showAlert('Spray job saved!', 'success');
+  } else {
+    showAlert(r.message || 'Failed to save.', 'error');
+  }
+}
+
+async function loadFollowUps() {
+  const data = await get('/api/admin/spray?upcoming=true');
+  const el = document.getElementById('followups-list');
+  if (!data.length) { el.innerHTML = '<div class="table-empty">No upcoming follow-ups in the next 30 days</div>'; return; }
+  const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Due Date</th><th>Status</th><th>Client</th><th>Address</th><th>Service</th><th>Product</th><th>Worker</th></tr></thead>
+    <tbody>${data.map(r => {
+      const due = new Date(r.next_service_date + 'T12:00:00'); due.setHours(0,0,0,0);
+      const diff = Math.round((due - todayDate) / 86400000);
+      const status = diff < 0 ? 'Overdue' : diff === 0 ? 'Due Today' : diff <= 7 ? 'Due Soon' : 'Upcoming';
+      const cls = diff < 0 ? 'badge-overtime' : diff <= 7 ? 'badge-warning-hrs' : 'badge-success';
+      return `<tr>
+        <td>${fmtDateShort(r.next_service_date)}</td>
+        <td><span class="badge ${cls}">${status}</span></td>
+        <td><strong>${esc(r.client_name||'—')}</strong>${r.client_phone?`<br><span class="text-muted" style="font-size:.75rem">${esc(r.client_phone)}</span>`:''}</td>
+        <td>${esc(r.client_address||r.location_name||'—')}</td>
+        <td>${r.category?`<span class="badge badge-gray">${esc(r.category)}</span>`:'—'}</td>
+        <td>${esc(r.product||'—')}</td>
+        <td>${esc(r.worker_name)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
 }
 
 // ── Dashboard ─────────────────────────────────────
@@ -517,6 +578,8 @@ async function loadWorkers() {
   document.getElementById('f-worker').innerHTML = '<option value="">All Workers</option>' + opts;
   const spjW = document.getElementById('spj-worker');
   if (spjW) spjW.innerHTML = '<option value="">All Workers</option>' + opts;
+  const ajW = document.getElementById('aj-worker');
+  if (ajW) ajW.innerHTML = '<option value="">— Select —</option>' + opts;
   const tbody = document.getElementById('workers-tbody');
   if (!workers.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No workers yet</td></tr>'; return; }
   tbody.innerHTML = workers.map(w => `

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Legacy Landscape Management – Admin</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=12">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
 </head>
@@ -132,9 +132,89 @@
       <!-- Sub-nav -->
       <div class="admin-nav" style="margin-bottom:1rem">
         <button class="nav-btn active" onclick="showSpraySection(this,'spray-overview')">Overview</button>
-        <button class="nav-btn"        onclick="showSpraySection(this,'spray-jobs')">Jobs</button>
+        <button class="nav-btn"        onclick="showSpraySection(this,'spray-add-job')">+ Add Job</button>
+        <button class="nav-btn"        onclick="showSpraySection(this,'spray-jobs')">Spray Jobs</button>
         <button class="nav-btn"        onclick="showSpraySection(this,'spray-clients')">Clients</button>
         <button class="nav-btn"        onclick="showSpraySection(this,'spray-products')">Products</button>
+        <button class="nav-btn"        onclick="showSpraySection(this,'spray-followups')">Follow-Ups</button>
+      </div>
+
+      <!-- SPRAY: Add Job -->
+      <div id="spray-add-job" class="section-hidden">
+        <div class="card" style="max-width:680px;margin:0 auto">
+          <div class="card-title">Add Spray Job</div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Client Name</label>
+              <input id="aj-client-name" type="text" class="form-control" placeholder="e.g. Johnson Residence">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input id="aj-client-phone" type="tel" class="form-control" placeholder="(555) 000-0000">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Address</label>
+            <input id="aj-address" type="text" class="form-control" placeholder="123 Main St">
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Service Type <span style="color:var(--red)">*</span></label>
+              <select id="aj-service" class="form-control">
+                <option value="">— Select —</option>
+                <option>Pre-emergent</option>
+                <option>Weed Control</option>
+                <option>Fertilizer</option>
+                <option>Fungicide</option>
+                <option>Pest Control</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Product Used <span style="color:var(--red)">*</span></label>
+              <input id="aj-product" type="text" class="form-control" placeholder="Product name">
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Employee <span style="color:var(--red)">*</span></label>
+              <select id="aj-worker" class="form-control">
+                <option value="">— Select —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input id="aj-date" type="date" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Start Time</label>
+              <input id="aj-start-time" type="time" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">End Time</label>
+              <input id="aj-end-time" type="time" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Next Service Date</label>
+            <input id="aj-next-date" type="date" class="form-control">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <input id="aj-notes" type="text" class="form-control" placeholder="Any additional notes">
+          </div>
+
+          <button class="btn btn-primary btn-block btn-lg" onclick="addSprayJob()">Save Spray Job</button>
+        </div>
       </div>
 
       <!-- SPRAY: Overview -->
@@ -216,6 +296,17 @@
               <tbody id="products-tbody"><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- SPRAY: Follow-Ups -->
+      <div id="spray-followups" class="section-hidden">
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="sec-hdr" style="padding:1rem 1.25rem .75rem">
+            <div class="card-title mb-0">Upcoming Follow-Ups</div>
+            <button class="btn btn-outline btn-sm" onclick="exportUpcomingCSV()">Export CSV</button>
+          </div>
+          <div id="followups-list"><div class="table-empty">Loading…</div></div>
         </div>
       </div>
 
