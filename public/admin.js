@@ -441,11 +441,19 @@ async function loadWorkers() {
   const spjW = document.getElementById('spj-worker');
   if (spjW) spjW.innerHTML = '<option value="">All Workers</option>' + opts;
   const tbody = document.getElementById('workers-tbody');
-  if (!workers.length) { tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No workers yet</td></tr>'; return; }
+  if (!workers.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No workers yet</td></tr>'; return; }
   tbody.innerHTML = workers.map(w => `
     <tr>
       <td><strong>${esc(w.name)}</strong></td>
       <td><span class="badge badge-gray">Hidden</span></td>
+      <td>
+        ${w.spray_access
+          ? `<span class="badge badge-success">✓ Enabled</span>
+             <button class="btn btn-outline btn-sm" style="margin-left:.4rem" onclick="toggleSprayAccess(${w.id},'${esc(w.name)}',true)">Revoke</button>`
+          : `<span class="badge badge-gray">Off</span>
+             <button class="btn btn-primary btn-sm" style="margin-left:.4rem" onclick="toggleSprayAccess(${w.id},'${esc(w.name)}',false)">Grant</button>`
+        }
+      </td>
       <td>${fmtDate(w.created_at)}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="openEditWorker(${w.id},'${esc(w.name)}')">Edit</button>
@@ -492,6 +500,15 @@ async function removeWorker(id, name) {
   await del(`/api/admin/workers/${id}`);
   loadWorkers(); loadStats();
   showAlert(`Worker "${name}" removed.`, 'success');
+}
+
+async function toggleSprayAccess(id, name, currentValue) {
+  const newValue = !currentValue;
+  const action = newValue ? 'Grant' : 'Revoke';
+  if (!confirm(`${action} spray access for "${name}"?`)) return;
+  await put(`/api/admin/workers/${id}/spray-access`, { spray_access: newValue });
+  loadWorkers();
+  showAlert(`Spray access ${newValue ? 'granted to' : 'revoked from'} "${name}".`, 'success');
 }
 
 // ── Locations ─────────────────────────────────────

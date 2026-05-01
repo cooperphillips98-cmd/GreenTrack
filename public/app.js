@@ -98,6 +98,9 @@ function signOut() {
 async function showApp() {
   hide('login-section'); show('app-section');
   document.getElementById('hdr-name').textContent = worker.name;
+  // Show/hide spray tab based on permission
+  const sprayNav = document.getElementById('nav-spray');
+  if (sprayNav) sprayNav.classList.toggle('section-hidden', !worker.sprayAccess);
   await Promise.all([loadLocations(), loadClients(), loadProductsForJobForm()]);
   await refreshStatus();
   showWorkerTab('clock');
@@ -105,6 +108,8 @@ async function showApp() {
 }
 
 function showWorkerTab(tab) {
+  // If worker doesn't have spray access, redirect spray tab to clock
+  if (tab === 'spray' && !worker.sprayAccess) tab = 'clock';
   ['clock', 'hours', 'jobs', 'spray'].forEach(t => {
     document.getElementById('tab-' + t).classList.toggle('section-hidden', t !== tab);
     document.getElementById('nav-' + t).classList.toggle('active', t === tab);
@@ -325,30 +330,57 @@ async function clockOut() {
 async function loadJobs(all = false) {
   const records = await get(`/api/spray/records?workerId=${worker.id}`);
   const el = document.getElementById('jobs-list');
-  if (!records.length) { el.innerHTML = '<div class="table-empty">No jobs logged yet</div>'; return; }
+  if (!records.length) {
+    el.innerHTML = '<div class="table-empty">No jobs yet — start a job from the Clock tab</div>';
+    return;
+  }
   const shown = all ? records : records.slice(0, 20);
+  const today = new Date(); today.setHours(0,0,0,0);
   el.innerHTML = shown.map(r => {
+    const clientDisplay = r.client_name || r.location_name || 'General Work';
+    const initials = clientDisplay.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
     const dur = r.duration_minutes ? fmtDur(r.duration_minutes) : null;
-    const clientDisplay = r.client_name || r.location_name || '—';
-    return `<div class="entry-row">
-      <div class="entry-main">
-        <div>
-          <div class="entry-loc">${esc(clientDisplay)}</div>
-          <div style="font-size:.775rem;color:var(--gray-600);margin-top:.1rem">${r.location_name && r.client_name ? '📍 ' + esc(r.location_name) : ''}</div>
+    const address = r.client_address || (r.location_name && r.client_name ? r.location_name : '');
+
+    let statusBadge = '';
+    if (r.next_service_date) {
+      const due = new Date(r.next_service_date + 'T12:00:00');
+      due.setHours(0,0,0,0);
+      const diff = Math.round((due - today) / 86400000);
+      statusBadge = diff < 0
+        ? `<span class="badge badge-overtime">Overdue</span>`
+        : diff <= 7
+          ? `<span class="badge badge-warning-hrs">Due Soon</span>`
+          : `<span class="badge badge-success">Upcoming</span>`;
+    }
+
+    return `<div class="job-card">
+      <div class="job-avatar">${esc(initials)}</div>
+      <div class="job-card-body">
+        <div class="job-card-top">
+          <div>
+            <div class="job-card-name">${esc(clientDisplay)}</div>
+            ${address ? `<div class="job-card-addr">${esc(address)}</div>` : ''}
+            ${r.category ? `<div class="job-card-service" style="color:${serviceColor(r.category)}">${esc(r.category)}</div>` : ''}
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            ${statusBadge}
+            ${dur ? `<div class="job-card-dur">⏱ ${dur}</div>` : ''}
+            <div class="job-card-date">${fmtDate(r.applied_at)}</div>
+          </div>
         </div>
-        <div style="text-align:right">
-          ${r.category ? `<div>${sprayBadge(r.category)}</div>` : ''}
-          ${dur ? `<div class="entry-dur" style="margin-top:.25rem">${dur}</div>` : ''}
-        </div>
-      </div>
-      <div class="entry-meta">
-        <span>${fmtDate(r.applied_at)}</span>
-        ${r.product ? `<span>🧪 ${esc(r.product)}</span>` : ''}
-        ${r.next_service_date ? `<span>📅 Next: ${fmtDateShort(r.next_service_date)}</span>` : ''}
-        ${r.notes ? `<span>📝 ${esc(r.notes)}</span>` : ''}
+        ${r.notes ? `<div class="job-card-notes">📝 ${esc(r.notes)}</div>` : ''}
       </div>
     </div>`;
   }).join('');
+}
+
+function serviceColor(cat) {
+  if (!cat) return 'var(--gray-500)';
+  if (cat === 'Fertilizer') return '#16a34a';
+  if (cat === 'Weed Control' || cat === 'Pre-emergent') return '#d97706';
+  if (cat === 'Pest Control' || cat === 'Fungicide') return '#dc2626';
+  return 'var(--green)';
 }
 
 async function loadUpcoming() {
@@ -359,7 +391,7 @@ async function loadUpcoming() {
   show('upcoming-section');
   const today = new Date(); today.setHours(0,0,0,0);
   el.innerHTML = records.map(r => {
-    const due = new Date(r.next_service_date);
+    const due = new Date(r.next_service_date + 'T12:00:00');
     due.setHours(0,0,0,0);
     const diffDays = Math.round((due - today) / 86400000);
     const urgency = diffDays < 0 ? 'badge-overtime' : diffDays <= 7 ? 'badge-warning-hrs' : 'badge-success';

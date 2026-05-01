@@ -128,13 +128,15 @@
 
       <!-- SPRAY: Overview -->
       <div id="spray-overview">
-        <div class="seasonal-card" id="admin-seasonal-prompt"></div>
-        <div class="card">
-          <div class="sec-hdr">
-            <div class="card-title mb-0">Upcoming Follow-Ups</div>
-            <button class="btn btn-outline btn-sm" onclick="exportUpcomingCSV()">Export CSV</button>
+        <div style="display:grid;grid-template-columns:1fr 300px;gap:.875rem;align-items:start">
+          <div class="card" style="margin-bottom:0">
+            <div class="sec-hdr">
+              <div class="card-title mb-0">Upcoming Follow-Ups</div>
+              <button class="btn btn-outline btn-sm" onclick="exportUpcomingCSV()">Export CSV</button>
+            </div>
+            <div id="admin-upcoming-list"><div class="table-empty">Loading…</div></div>
           </div>
-          <div id="admin-upcoming-list"><div class="table-empty">Loading…</div></div>
+          <div class="seasonal-card" id="admin-seasonal-prompt" style="margin-bottom:0"></div>
         </div>
       </div>
 
@@ -218,8 +220,8 @@
         <div class="card mb-0" style="padding:0;overflow:hidden">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>PIN</th><th>Added</th><th>Actions</th></tr></thead>
-              <tbody id="workers-tbody"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
+              <thead><tr><th>Name</th><th>PIN</th><th>Spray Access</th><th>Added</th><th>Actions</th></tr></thead>
+              <tbody id="workers-tbody"><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
             </table>
           </div>
         </div>

@@ -35,7 +35,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (!name || !pin) return res.status(400).json({ success: false, message: 'Name and PIN required.' });
   const worker = await db.getWorkerByCredentials(name.trim(), pin.trim());
   if (worker) {
-    res.json({ success: true, worker: { id: worker.id, name: worker.name } });
+    res.json({ success: true, worker: { id: worker.id, name: worker.name, sprayAccess: !!worker.spray_access } });
   } else {
     res.status(401).json({ success: false, message: 'Invalid name or PIN.' });
   }
@@ -228,6 +228,10 @@ app.put('/api/admin/workers/:id', async (req, res) => {
 });
 app.delete('/api/admin/workers/:id', async (req, res) => {
   await db.deleteWorker(req.params.id);
+  res.json({ success: true });
+});
+app.put('/api/admin/workers/:id/spray-access', async (req, res) => {
+  await db.setWorkerSprayAccess(req.params.id, req.body.spray_access);
   res.json({ success: true });
 });
 

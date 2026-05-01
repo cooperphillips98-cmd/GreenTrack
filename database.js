@@ -61,6 +61,7 @@ async function init() {
       duration_minutes INTEGER,
       notes TEXT
     );
+    ALTER TABLE workers ADD COLUMN IF NOT EXISTS spray_access BOOLEAN DEFAULT FALSE;
     ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS photo TEXT;
     ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS notified_overtime BOOLEAN DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS spray_records (
@@ -133,12 +134,15 @@ module.exports = {
 
   // Workers
   async getWorkers() {
-    const r = await pool.query('SELECT id,name,active,created_at FROM workers WHERE active=TRUE ORDER BY name');
+    const r = await pool.query('SELECT id,name,active,spray_access,created_at FROM workers WHERE active=TRUE ORDER BY name');
     return r.rows;
   },
   async getWorkerByCredentials(name, pin) {
     const r = await pool.query('SELECT * FROM workers WHERE name=$1 AND pin=$2 AND active=TRUE', [name, pin]);
     return r.rows[0] || null;
+  },
+  async setWorkerSprayAccess(id, access) {
+    await pool.query('UPDATE workers SET spray_access=$1 WHERE id=$2', [!!access, id]);
   },
   async addWorker(name, pin) {
     try {
