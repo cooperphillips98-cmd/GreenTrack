@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#1b4332">
@@ -88,6 +88,17 @@
         <label class="form-label">Notes (optional)</label>
         <input id="out-notes" type="text" class="form-control" placeholder="e.g. Mowed front lawn, trimmed hedges">
       </div>
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label class="form-label">Job Photo (optional)</label>
+        <div id="photo-preview-wrap" class="section-hidden" style="margin-bottom:.5rem">
+          <img id="photo-preview" src="" alt="" style="width:100%;border-radius:var(--r-sm);max-height:200px;object-fit:cover">
+          <button class="btn btn-outline btn-sm" style="margin-top:.4rem;width:100%" onclick="clearPhoto()">✕ Remove Photo</button>
+        </div>
+        <label class="btn btn-outline btn-block" style="cursor:pointer">
+          📷 Take / Choose Photo
+          <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this)">
+        </label>
+      </div>
       <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ Clock Out</button>
     </div>
   </div>
@@ -99,7 +110,10 @@
       <div class="week-stat-label">This Week's Total Hours</div>
     </div>
     <div class="card">
-      <div class="card-title">This Week Breakdown</div>
+      <div class="sec-hdr">
+        <div class="card-title mb-0">This Week Breakdown</div>
+        <button class="btn btn-outline btn-sm" onclick="exportHoursCSV()">Export CSV</button>
+      </div>
       <div id="week-breakdown"><div class="table-empty">Loading…</div></div>
     </div>
   </div>
@@ -112,6 +126,53 @@
         <button class="btn btn-outline btn-sm" onclick="loadHistory(true)">Load All</button>
       </div>
       <div id="entries-list"><div class="table-empty">No entries yet</div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Spray Log -->
+  <div id="tab-spray" class="tab-pane section-hidden container" style="padding-top:1rem">
+    <div id="seasonal-prompt" class="seasonal-card"></div>
+    <div class="card">
+      <div class="card-title">Log Application</div>
+      <div class="form-group">
+        <label class="form-label">Job Site / Client</label>
+        <select id="sp-loc" class="form-control">
+          <option value="">— Select location —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select id="sp-cat" class="form-control" onchange="updateProductList()">
+          <option value="">— Select category —</option>
+          <option>Pre-emergent</option>
+          <option>Post-emergent Herbicide</option>
+          <option>Fertilizer</option>
+          <option>Fungicide</option>
+          <option>Insecticide / Grub Control</option>
+          <option>Dormant / Horticultural Oil</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Product</label>
+        <select id="sp-prod" class="form-control">
+          <option value="">— Select category first —</option>
+        </select>
+        <input id="sp-prod-custom" type="text" class="form-control section-hidden" placeholder="Enter product name" style="margin-top:.4rem">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date &amp; Time Applied</label>
+        <input id="sp-date" type="datetime-local" class="form-control">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input id="sp-notes" type="text" class="form-control" placeholder="e.g. Front lawn only, 2 bags">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" onclick="logSpray()">Log Application</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent Applications</div>
+      <div id="spray-list"><div class="table-empty">Loading…</div></div>
     </div>
   </div>
 
@@ -129,7 +190,17 @@
       <span class="bottom-nav-icon">📋</span>
       History
     </button>
+    <button class="bottom-nav-btn" id="nav-spray" onclick="showWorkerTab('spray')">
+      <span class="bottom-nav-icon">🌿</span>
+      Spray
+    </button>
   </nav>
+</div>
+
+<!-- Photo Modal -->
+<div id="photo-modal" class="photo-modal section-hidden" onclick="closePhotoModal()">
+  <img id="photo-modal-img" src="" alt="Job Photo">
+  <div style="color:#fff;font-size:.8rem;margin-top:.5rem;opacity:.7">Tap to close</div>
 </div>
 
 <script src="app.js"></script>

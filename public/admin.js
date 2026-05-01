@@ -44,19 +44,20 @@ function adminSignOut() {
 async function showAdminApp() {
   hide('admin-login'); show('admin-app');
   try { const cfg = await get('/api/config'); MAPBOX_TOKEN = cfg.mapboxToken; } catch {}
-  await Promise.all([loadStats(), loadActive(), loadWorkers(), loadLocations()]);
+  await Promise.all([loadStats(), loadActive(), loadWorkers(), loadLocations(), loadOvertime()]);
   setInterval(updateTimers, 1000);
-  setInterval(() => { if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) { loadStats(); loadActive(); } }, 30000);
+  setInterval(() => { if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) { loadStats(); loadActive(); loadOvertime(); } }, 30000);
 }
 
 function showTab(btn, tab) {
-  ['dashboard','entries','workers','locations','settings'].forEach(t => {
+  ['dashboard','entries','spray','workers','locations','settings'].forEach(t => {
     document.getElementById('tab-' + t).classList.add('section-hidden');
   });
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.remove('section-hidden');
   btn.classList.add('active');
   if (tab === 'entries') loadEntries();
+  if (tab === 'spray')   loadSprayLog();
 }
 
 async function loadStats() {
@@ -93,6 +94,72 @@ function updateTimers() {
   });
 }
 
+async function loadOvertime() {
+  const workers = await get('/api/admin/overtime');
+  const el = document.getElementById('overtime-list');
+  if (!workers.length) { el.innerHTML = '<div class="table-empty">No workers found</div>'; return; }
+  el.innerHTML = workers.map(w => {
+    const hrs = (w.week_minutes / 60).toFixed(1);
+    const pct = Math.min(100, Math.round(w.week_minutes / 2400 * 100));
+    const badge = w.week_minutes >= 2400
+      ? `<span class="badge badge-overtime">OVERTIME ${hrs}h</span>`
+      : w.week_minutes >= 2100
+        ? `<span class="badge badge-warning-hrs">${hrs}h — approaching 40h</span>`
+        : `<span class="badge badge-gray">${hrs}h</span>`;
+    return `<div class="active-row">
+      <div>
+        <div class="active-name">${esc(w.worker_name)}</div>
+        <div style="background:var(--gray-200);border-radius:99px;height:5px;width:120px;margin-top:.4rem">
+          <div style="background:${w.week_minutes>=2400?'var(--red)':w.week_minutes>=2100?'var(--amber)':'var(--green)'};height:5px;border-radius:99px;width:${pct}%"></div>
+        </div>
+      </div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+let allSprayRecords = [];
+
+async function loadSprayLog() {
+  const params = new URLSearchParams();
+  const w = document.getElementById('sp-f-worker')?.value;
+  const l = document.getElementById('sp-f-location')?.value;
+  const s = document.getElementById('sp-f-start')?.value;
+  const e = document.getElementById('sp-f-end')?.value;
+  if (w) params.set('workerId', w);
+  if (l) params.set('locationId', l);
+  if (s) params.set('startDate', s);
+  if (e) params.set('endDate', e);
+  allSprayRecords = await get('/api/admin/spray?' + params);
+  const tbody = document.getElementById('spray-tbody');
+  if (!allSprayRecords.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No records found</td></tr>'; return;
+  }
+  tbody.innerHTML = allSprayRecords.map(r => `<tr>
+    <td>${fmtDate(r.applied_at)}</td>
+    <td><strong>${esc(r.worker_name)}</strong></td>
+    <td>${r.location_name ? esc(r.location_name) : '<span class="text-muted">—</span>'}</td>
+    <td>${r.category ? `<span class="badge badge-gray">${esc(r.category)}</span>` : '<span class="text-muted">—</span>'}</td>
+    <td><strong>${esc(r.product)}</strong></td>
+    <td>${r.notes ? esc(r.notes) : '<span class="text-muted">—</span>'}</td>
+  </tr>`).join('');
+}
+
+function exportSprayCSV() {
+  if (!allSprayRecords.length) { showAlert('No records to export. Apply filters first.', 'warning'); return; }
+  const hdr = ['Date', 'Worker', 'Location', 'Category', 'Product', 'Notes'];
+  const rows = allSprayRecords.map(r => [
+    fmtDate(r.applied_at), r.worker_name, r.location_name || '',
+    r.category || '', r.product, r.notes || ''
+  ]);
+  const csv = [hdr, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: `spray-log-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  a.click();
+}
+
 async function forceClockOut(id, name) {
   if (!confirm(`Clock out ${name}?`)) return;
   const r = await post(`/api/admin/entries/${id}/clock-out`, {});
@@ -101,9 +168,10 @@ async function forceClockOut(id, name) {
 
 async function loadWorkers() {
   const workers = await get('/api/admin/workers');
-  const fSel = document.getElementById('f-worker');
-  fSel.innerHTML = '<option value="">All Workers</option>' +
-    workers.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
+  const opts = workers.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
+  document.getElementById('f-worker').innerHTML = '<option value="">All Workers</option>' + opts;
+  const spW = document.getElementById('sp-f-worker');
+  if (spW) spW.innerHTML = '<option value="">All Workers</option>' + opts;
   const tbody = document.getElementById('workers-tbody');
   if (!workers.length) { tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No workers yet</td></tr>'; return; }
   tbody.innerHTML = workers.map(w => `
@@ -121,9 +189,10 @@ async function loadWorkers() {
 async function loadLocations() {
   const locs = await get('/api/locations');
   allLocations = locs;
-  const fSel = document.getElementById('f-location');
-  fSel.innerHTML = '<option value="">All Locations</option>' +
-    locs.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  const opts = locs.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  document.getElementById('f-location').innerHTML = '<option value="">All Locations</option>' + opts;
+  const spL = document.getElementById('sp-f-location');
+  if (spL) spL.innerHTML = '<option value="">All Locations</option>' + opts;
   const tbody = document.getElementById('locations-tbody');
   if (!locs.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No locations yet</td></tr>'; return; }
   tbody.innerHTML = locs.map(l => {

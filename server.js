@@ -1,10 +1,11 @@
 console.log('SERVER STARTING...');
 const express = require('express');
 const path = require('path');
+const webpush = require('web-push');
 const db = require('./database');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -25,8 +26,10 @@ function pointInPolygon(lat, lng, polygon) {
   }
   return inside;
 }
+
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Auth
 app.post('/api/auth/login', async (req, res) => {
   const { name, pin } = req.body;
   if (!name || !pin) return res.status(400).json({ success: false, message: 'Name and PIN required.' });
@@ -47,12 +50,15 @@ app.post('/api/admin/auth', async (req, res) => {
   }
 });
 
-app.get('/api/config', (req, res) => {
-  res.json({ mapboxToken: process.env.MAPBOX_TOKEN || '' });
+app.get('/api/config', async (req, res) => {
+  const vapidPublic = await db.getSetting('vapid_public').catch(() => null);
+  res.json({ mapboxToken: process.env.MAPBOX_TOKEN || '', vapidPublicKey: vapidPublic || '' });
 });
 
+// Locations
 app.get('/api/locations', async (req, res) => res.json(await db.getLocations()));
 
+// Time entries
 app.post('/api/entries/clock-in', async (req, res) => {
   const { workerId, locationId, latitude, longitude } = req.body;
   if (!workerId || !locationId) return res.status(400).json({ success: false, message: 'Missing required fields.' });
@@ -82,10 +88,10 @@ app.post('/api/entries/clock-in', async (req, res) => {
 });
 
 app.post('/api/entries/clock-out', async (req, res) => {
-  const { workerId, latitude, longitude, notes } = req.body;
+  const { workerId, latitude, longitude, notes, photo } = req.body;
   const current = await db.getCurrentEntry(workerId);
   if (!current) return res.status(400).json({ success: false, message: 'Not currently clocked in.' });
-  const entry = await db.clockOut(current.id, latitude, longitude, notes);
+  const entry = await db.clockOut(current.id, latitude, longitude, notes, photo);
   res.json({ success: true, entry });
 });
 
@@ -98,8 +104,43 @@ app.get('/api/entries/worker/:workerId', async (req, res) => {
   res.json(await db.getWorkerEntries(req.params.workerId, startDate, endDate));
 });
 
+app.get('/api/entries/:id/photo', async (req, res) => {
+  const photo = await db.getEntryPhoto(req.params.id);
+  if (!photo) return res.status(404).json({ photo: null });
+  res.json({ photo });
+});
+
+// Push notifications
+app.post('/api/push/subscribe', async (req, res) => {
+  const { workerId, subscription } = req.body;
+  if (!workerId || !subscription) return res.status(400).json({ success: false });
+  await db.savePushSubscription(workerId, subscription.endpoint, subscription);
+  res.json({ success: true });
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body;
+  if (endpoint) await db.removePushSubscription(endpoint);
+  res.json({ success: true });
+});
+
+// Spray records
+app.get('/api/spray/records', async (req, res) => {
+  const { workerId, startDate, endDate } = req.query;
+  res.json(await db.getWorkerSprayRecords(workerId, startDate, endDate));
+});
+
+app.post('/api/spray/records', async (req, res) => {
+  const { workerId, locationId, product, category, appliedAt, notes } = req.body;
+  if (!workerId || !product) return res.status(400).json({ success: false, message: 'Worker and product required.' });
+  const record = await db.addSprayRecord(workerId, locationId, product, category, appliedAt || new Date().toISOString(), notes);
+  res.json({ success: true, record });
+});
+
+// Admin
 app.get('/api/admin/stats', async (req, res) => res.json(await db.getStats()));
 app.get('/api/admin/active', async (req, res) => res.json(await db.getActiveEntries()));
+app.get('/api/admin/overtime', async (req, res) => res.json(await db.getWeeklyHoursByWorker()));
 
 app.get('/api/admin/entries', async (req, res) => {
   const { workerId, locationId, startDate, endDate } = req.query;
@@ -107,7 +148,7 @@ app.get('/api/admin/entries', async (req, res) => {
 });
 
 app.post('/api/admin/entries/:id/clock-out', async (req, res) => {
-  const entry = await db.clockOut(req.params.id, null, null, 'Clocked out by admin');
+  const entry = await db.clockOut(req.params.id, null, null, 'Clocked out by admin', null);
   res.json({ success: true, entry });
 });
 
@@ -164,11 +205,55 @@ app.put('/api/admin/settings/password', async (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/api/admin/spray', async (req, res) => {
+  const { workerId, locationId, startDate, endDate } = req.query;
+  res.json(await db.getAllSprayRecords({ workerId, locationId, startDate, endDate }));
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
-  db.init().then(() => {
+  db.init().then(async () => {
     console.log('Database connected OK');
+    // Initialize VAPID keys for push notifications
+    try {
+      let pub = await db.getSetting('vapid_public');
+      let priv = await db.getSetting('vapid_private');
+      if (!pub || !priv) {
+        const keys = webpush.generateVAPIDKeys();
+        pub = keys.publicKey;
+        priv = keys.privateKey;
+        await db.setSetting('vapid_public', pub);
+        await db.setSetting('vapid_private', priv);
+        console.log('Generated new VAPID keys');
+      }
+      webpush.setVapidDetails('mailto:admin@legacylandscape.com', pub, priv);
+      console.log('VAPID keys loaded');
+
+      // Check for workers clocked in 8+ hours every 30 minutes
+      setInterval(async () => {
+        try {
+          const checks = await db.getOvertimeChecks();
+          for (const row of checks) {
+            try {
+              await webpush.sendNotification(
+                JSON.parse(row.subscription),
+                JSON.stringify({
+                  title: 'Clock Out Reminder',
+                  body: `You've been clocked in at ${row.location_name} for 8+ hours. Don't forget to clock out!`,
+                  icon: '/logo.png'
+                })
+              );
+            } catch { /* subscription may be expired */ }
+            await db.markOvertimeNotified(row.entry_id);
+          }
+        } catch (e) {
+          console.error('Push check error:', e.message);
+        }
+      }, 30 * 60 * 1000);
+    } catch (e) {
+      console.error('VAPID init error:', e.message);
+    }
   }).catch(err => {
     console.error('Database error:', err.message);
   });

@@ -2,8 +2,35 @@ let worker = null;
 let currentEntry = null;
 let timerInterval = null;
 let deferredPrompt = null;
+let photoData = null;
+let allEntries = [];
 
-// PWA install prompt (Android/Chrome)
+const SPRAY_PRODUCTS = {
+  'Pre-emergent': ['Prodiamine 65 WDG', 'Barricade 4FL', 'Dimension 0.15G', 'Pendimethalin', 'Other'],
+  'Post-emergent Herbicide': ['Celsius WG', 'Trimec / 3-Way', 'Certainty', 'Drive XLR8', 'Roundup (spot treat)', 'Other'],
+  'Fertilizer': ['16-4-8 Slow Release', '24-0-11 Summer Blend', '12-12-12 Balanced', '0-0-7 Potassium', 'Milorganite', 'Winterizer', 'Other'],
+  'Fungicide': ['Heritage G', 'Headway G', 'Pillar G', 'Clearys 3336 F', 'Triton Flo', 'Other'],
+  'Insecticide / Grub Control': ['Dylox 6.2G', 'Talstar P', 'Meridian 25WG', 'Sevin SL', 'Safari 20SG', 'Other'],
+  'Dormant / Horticultural Oil': ['Horticultural Oil', 'Neem Oil', 'Other'],
+  'Other': ['Custom / Other'],
+};
+
+const SEASONAL = [
+  { months: [0],     label: 'January',           tips: ['Apply dormant oil to trees & shrubs', 'Plan spring pre-emergent timing', 'Equipment maintenance'] },
+  { months: [1],     label: 'February',           tips: ['Pre-emergent if soil temp approaching 50°F', 'Prepare products for spring'] },
+  { months: [2],     label: 'March',              tips: ['PRE-EMERGENT — crabgrass prevention', 'Round 1 fertilizer if soil >55°F', 'Broadleaf spot treatment'] },
+  { months: [3],     label: 'April',              tips: ['Round 1 fertilizer (slow-release nitrogen)', 'Post-emergent broadleaf weed control', 'Fire ant bait application'] },
+  { months: [4],     label: 'May',                tips: ['Post-emergent weed control', 'Light Round 2 fertilizer', 'Begin grub monitoring'] },
+  { months: [5],     label: 'June',               tips: ['Grub control application', 'Fungicide if brown patch appears', 'Spot weed treatment'] },
+  { months: [6],     label: 'July',               tips: ['Grub control if missed June', 'Monitor for chinch bugs', 'Minimal fertilizer — heat stress risk'] },
+  { months: [7],     label: 'August',             tips: ['Round 2–3 fertilizer (late summer)', 'Fungicide for brown patch', 'Broadleaf spot treatment'] },
+  { months: [8],     label: 'September',          tips: ['PRE-EMERGENT — winter weeds (poa annua)', 'Round 3 fertilizer', 'Aeration & overseeding'] },
+  { months: [9],     label: 'October',            tips: ['Broadleaf weed control', 'Round 4 fertilizer', 'Second pre-emergent application'] },
+  { months: [10],    label: 'November',           tips: ['WINTERIZER fertilizer (last application)', 'Final pre-emergent if needed', 'Equipment winterization'] },
+  { months: [11],    label: 'December',           tips: ['Dormant oil spray', 'Review spray records for the year', 'Order spring products'] },
+];
+
+// PWA install prompt
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
@@ -34,6 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('inp-pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
   document.getElementById('inp-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inp-pin').focus(); });
   if (isIOS() && !isInStandaloneMode()) show('ios-banner');
+  // Set spray datetime to now
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  const el = document.getElementById('sp-date');
+  if (el) el.value = now.toISOString().slice(0, 16);
 });
 
 async function login() {
@@ -67,15 +99,17 @@ async function showApp() {
   await loadLocations();
   await refreshStatus();
   showWorkerTab('clock');
+  setupPushNotifications();
 }
 
 function showWorkerTab(tab) {
-  ['clock', 'hours', 'history'].forEach(t => {
+  ['clock', 'hours', 'history', 'spray'].forEach(t => {
     document.getElementById('tab-' + t).classList.toggle('section-hidden', t !== tab);
     document.getElementById('nav-' + t).classList.toggle('active', t === tab);
   });
-  if (tab === 'hours') loadWeekHours();
+  if (tab === 'hours')   loadWeekHours();
   if (tab === 'history') loadHistory();
+  if (tab === 'spray')   { loadSprayHistory(); renderSeasonalPrompt(); populateSprayLocations(); }
 }
 
 async function loadLocations() {
@@ -84,6 +118,17 @@ async function loadLocations() {
   sel.innerHTML = '<option value="">— Choose a location —</option>';
   locs.forEach(l => sel.insertAdjacentHTML('beforeend',
     `<option value="${l.id}">${esc(l.name)}${l.address ? ' — ' + esc(l.address) : ''}</option>`));
+  // Also populate spray location dropdown
+  const sp = document.getElementById('sp-loc');
+  if (sp) {
+    sp.innerHTML = '<option value="">— Select location —</option>';
+    locs.forEach(l => sp.insertAdjacentHTML('beforeend',
+      `<option value="${l.id}">${esc(l.name)}${l.address ? ' — ' + esc(l.address) : ''}</option>`));
+  }
+}
+
+function populateSprayLocations() {
+  // Called when switching to spray tab, locations already populated in loadLocations
 }
 
 async function refreshStatus() {
@@ -115,7 +160,7 @@ async function clockIn() {
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
   const r = await post('/api/entries/clock-in', { workerId: worker.id, locationId, latitude: lat, longitude: lng });
   if (r.success) {
-    await refreshStatus(); await loadHistory();
+    await refreshStatus();
     showAlert('Clocked in!', 'success');
   } else {
     showAlert(r.message || 'Failed to clock in.', 'error');
@@ -126,26 +171,72 @@ async function clockOut() {
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
   const notes = document.getElementById('out-notes').value.trim();
-  const r = await post('/api/entries/clock-out', { workerId: worker.id, latitude: lat, longitude: lng, notes });
+  const r = await post('/api/entries/clock-out', { workerId: worker.id, latitude: lat, longitude: lng, notes, photo: photoData });
   if (r.success) {
     document.getElementById('out-notes').value = '';
-    await refreshStatus(); await loadHistory(); await loadWeekHours();
+    clearPhoto();
+    await refreshStatus(); await loadWeekHours();
     showAlert(`Clocked out! Worked ${fmtDur(r.entry.duration_minutes)}.`, 'success');
   } else {
     showAlert(r.message || 'Failed.', 'error');
   }
 }
 
+// Photo handling
+function handlePhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX = 900;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h = h * MAX / w; w = MAX; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      photoData = canvas.toDataURL('image/jpeg', 0.72);
+      document.getElementById('photo-preview').src = photoData;
+      show('photo-preview-wrap');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearPhoto() {
+  photoData = null;
+  document.getElementById('photo-input').value = '';
+  document.getElementById('photo-preview').src = '';
+  hide('photo-preview-wrap');
+}
+
+async function viewPhoto(entryId) {
+  const data = await get(`/api/entries/${entryId}/photo`);
+  if (!data.photo) { showAlert('No photo for this entry.', 'error'); return; }
+  document.getElementById('photo-modal-img').src = data.photo;
+  show('photo-modal');
+}
+
+function closePhotoModal() {
+  hide('photo-modal');
+  document.getElementById('photo-modal-img').src = '';
+}
+
 async function loadHistory(all = false) {
-  const entries = await get(`/api/entries/worker/${worker.id}${all ? '' : '?endDate=' + today()}`);
+  allEntries = await get(`/api/entries/worker/${worker.id}${all ? '' : '?endDate=' + today()}`);
   const el = document.getElementById('entries-list');
-  if (!entries.length) { el.innerHTML = '<div class="table-empty">No entries yet</div>'; return; }
-  const shown = all ? entries : entries.slice(0, 10);
+  if (!allEntries.length) { el.innerHTML = '<div class="table-empty">No entries yet</div>'; return; }
+  const shown = all ? allEntries : allEntries.slice(0, 15);
   el.innerHTML = shown.map(e => `
     <div class="entry-row">
       <div class="entry-main">
         <div class="entry-loc">${esc(e.location_name)}</div>
-        <div class="entry-dur">${e.duration_minutes ? fmtDur(e.duration_minutes) : (e.clock_out ? '0m' : '<span class="badge badge-success">Active</span>')}</div>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div class="entry-dur">${e.duration_minutes ? fmtDur(e.duration_minutes) : (e.clock_out ? '0m' : '<span class="badge badge-success">Active</span>')}</div>
+          ${e.has_photo ? `<button class="btn btn-ghost btn-sm" style="color:var(--green);padding:.1rem .35rem" onclick="viewPhoto(${e.id})">📷</button>` : ''}
+        </div>
       </div>
       <div class="entry-meta">
         <span>${fmtDate(e.clock_in)}</span>
@@ -182,6 +273,140 @@ async function loadWeekHours() {
     </div>`).join('');
 }
 
+function exportHoursCSV() {
+  if (!allEntries.length) { showAlert('Load history first.', 'error'); return; }
+  const hdr = ['Date', 'Location', 'Clock In', 'Clock Out', 'Duration (min)', 'Duration (hrs)', 'Notes'];
+  const rows = allEntries.map(e => [
+    fmtDate(e.clock_in), e.location_name,
+    fmtDateTime(e.clock_in), e.clock_out ? fmtDateTime(e.clock_out) : '',
+    e.duration_minutes || '', e.duration_minutes ? (e.duration_minutes / 60).toFixed(2) : '',
+    e.notes || ''
+  ]);
+  const csv = [hdr, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: `hours-${worker.name.replace(/\s+/g, '-')}-${today()}.csv`
+  });
+  a.click();
+}
+
+// Spray Log
+function updateProductList() {
+  const cat = document.getElementById('sp-cat').value;
+  const sel = document.getElementById('sp-prod');
+  const custom = document.getElementById('sp-prod-custom');
+  if (!cat || !SPRAY_PRODUCTS[cat]) {
+    sel.innerHTML = '<option value="">— Select category first —</option>';
+    hide('sp-prod-custom');
+    return;
+  }
+  sel.innerHTML = SPRAY_PRODUCTS[cat].map(p => `<option value="${p}">${p}</option>`).join('');
+  sel.onchange = () => {
+    if (sel.value === 'Other') show('sp-prod-custom');
+    else { hide('sp-prod-custom'); custom.value = ''; }
+  };
+  hide('sp-prod-custom');
+  custom.value = '';
+}
+
+async function logSpray() {
+  const locationId = document.getElementById('sp-loc').value || null;
+  const cat   = document.getElementById('sp-cat').value;
+  const prodSel = document.getElementById('sp-prod').value;
+  const prodCustom = document.getElementById('sp-prod-custom').value.trim();
+  const product = (prodSel === 'Other' || !prodSel) ? prodCustom : prodSel;
+  const appliedAt = document.getElementById('sp-date').value;
+  const notes = document.getElementById('sp-notes').value.trim();
+
+  if (!cat)      { showAlert('Please select a category.', 'error'); return; }
+  if (!product)  { showAlert('Please select or enter a product.', 'error'); return; }
+
+  const r = await post('/api/spray/records', {
+    workerId: worker.id, locationId, product, category: cat,
+    appliedAt: appliedAt ? new Date(appliedAt).toISOString() : new Date().toISOString(),
+    notes
+  });
+  if (r.success) {
+    document.getElementById('sp-cat').value = '';
+    document.getElementById('sp-prod').innerHTML = '<option value="">— Select category first —</option>';
+    document.getElementById('sp-prod-custom').value = '';
+    hide('sp-prod-custom');
+    document.getElementById('sp-notes').value = '';
+    showAlert('Application logged!', 'success');
+    loadSprayHistory();
+  } else {
+    showAlert(r.message || 'Failed to log.', 'error');
+  }
+}
+
+async function loadSprayHistory() {
+  const records = await get(`/api/spray/records?workerId=${worker.id}`);
+  const el = document.getElementById('spray-list');
+  if (!records.length) { el.innerHTML = '<div class="table-empty">No applications logged yet</div>'; return; }
+  el.innerHTML = records.map(r => `
+    <div class="entry-row">
+      <div class="entry-main">
+        <div class="entry-loc">${esc(r.product)}</div>
+        <div>${sprayBadge(r.category)}</div>
+      </div>
+      <div class="entry-meta">
+        <span>${fmtDate(r.applied_at)}</span>
+        ${r.location_name ? `<span>📍 ${esc(r.location_name)}</span>` : ''}
+        ${r.notes ? `<span>📝 ${esc(r.notes)}</span>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function sprayBadge(cat) {
+  if (!cat) return '';
+  const cls = cat.startsWith('Fert') ? 'badge-fert'
+    : cat.startsWith('Pre') ? 'badge-herb'
+    : cat.startsWith('Post') ? 'badge-herb'
+    : cat.startsWith('Fung') ? 'badge-fung'
+    : cat.startsWith('Ins') ? 'badge-ins'
+    : 'badge-gray';
+  return `<span class="badge ${cls}">${esc(cat)}</span>`;
+}
+
+function renderSeasonalPrompt() {
+  const month = new Date().getMonth();
+  const season = SEASONAL.find(s => s.months.includes(month));
+  const el = document.getElementById('seasonal-prompt');
+  if (!season || !el) return;
+  el.innerHTML = `
+    <h3>🗓 ${season.label} — What's Due</h3>
+    <ul>${season.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
+}
+
+// Push Notifications
+async function setupPushNotifications() {
+  if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return; // already subscribed
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const cfg = await get('/api/config');
+    if (!cfg.vapidPublicKey) return;
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(cfg.vapidPublicKey)
+    });
+    await post('/api/push/subscribe', { workerId: worker.id, subscription: sub.toJSON() });
+  } catch { /* push not supported or denied */ }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
 // Helpers
 function getGPS() {
   return new Promise((res, rej) => {
@@ -200,9 +425,10 @@ function fmtDur(m) {
 }
 function fmtTime(iso) { return iso ? new Date(iso).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : ''; }
 function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) : ''; }
+function fmtDateTime(iso) { const d = new Date(iso); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString(); }
 function today() { return new Date().toISOString().split('T')[0]; }
 function pad(n) { return String(n).padStart(2,'0'); }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function show(id) { document.getElementById(id).classList.remove('section-hidden'); }
 function hide(id) { document.getElementById(id).classList.add('section-hidden'); }
 function showLoginErr(msg) {

@@ -42,6 +42,25 @@ async function init() {
       duration_minutes INTEGER,
       notes TEXT
     );
+    ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS photo TEXT;
+    ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS notified_overtime BOOLEAN DEFAULT FALSE;
+    CREATE TABLE IF NOT EXISTS spray_records (
+      id SERIAL PRIMARY KEY,
+      worker_id INTEGER REFERENCES workers(id),
+      location_id INTEGER REFERENCES locations(id),
+      product TEXT NOT NULL,
+      category TEXT,
+      applied_at TIMESTAMPTZ NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      worker_id INTEGER REFERENCES workers(id),
+      endpoint TEXT UNIQUE NOT NULL,
+      subscription JSONB NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
     INSERT INTO settings (key,value) VALUES ('admin_password','admin1234') ON CONFLICT DO NOTHING;
   `);
 }
@@ -58,6 +77,13 @@ module.exports = {
   },
   async updateAdminPassword(password) {
     await pool.query("UPDATE settings SET value=$1 WHERE key='admin_password'", [password]);
+  },
+  async getSetting(key) {
+    const r = await pool.query('SELECT value FROM settings WHERE key=$1', [key]);
+    return r.rows[0]?.value || null;
+  },
+  async setSetting(key, value) {
+    await pool.query('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=$2', [key, value]);
   },
   async getWorkers() {
     const r = await pool.query('SELECT id,name,active,created_at FROM workers WHERE active=TRUE ORDER BY name');
@@ -115,17 +141,18 @@ module.exports = {
     );
     return r.rows[0];
   },
-  async clockOut(entryId, lat, lng, notes) {
+  async clockOut(entryId, lat, lng, notes, photo) {
     const r = await pool.query(`
       UPDATE time_entries SET
         clock_out=NOW(),
         clock_out_lat=$2,
         clock_out_lng=$3,
         duration_minutes=ROUND(EXTRACT(EPOCH FROM (NOW()-clock_in))/60),
-        notes=$4
+        notes=$4,
+        photo=$5
       WHERE id=$1
       RETURNING id,clock_out,duration_minutes
-    `, [entryId, lat || null, lng || null, notes || null]);
+    `, [entryId, lat || null, lng || null, notes || null, photo || null]);
     return r.rows[0];
   },
   async getCurrentEntry(workerId) {
@@ -136,6 +163,10 @@ module.exports = {
       WHERE te.worker_id=$1 AND te.clock_out IS NULL
     `, [workerId]);
     return r.rows[0] || null;
+  },
+  async getEntryPhoto(entryId) {
+    const r = await pool.query('SELECT photo FROM time_entries WHERE id=$1', [entryId]);
+    return r.rows[0]?.photo || null;
   },
   async getActiveEntries() {
     const r = await pool.query(`
@@ -150,7 +181,9 @@ module.exports = {
   },
   async getWorkerEntries(workerId, startDate, endDate) {
     let q = `
-      SELECT te.*,l.name as location_name
+      SELECT te.id,te.worker_id,te.location_id,te.clock_in,te.clock_out,
+             te.duration_minutes,te.notes,(te.photo IS NOT NULL) as has_photo,
+             l.name as location_name
       FROM time_entries te
       JOIN locations l ON te.location_id=l.id
       WHERE te.worker_id=$1
@@ -192,5 +225,91 @@ module.exports = {
       todayHours:   +(parseInt(t.rows[0].total)  / 60).toFixed(1),
       weekHours:    +(parseInt(wk.rows[0].total) / 60).toFixed(1),
     };
+  },
+  async getWeeklyHoursByWorker() {
+    const r = await pool.query(`
+      SELECT w.id, w.name as worker_name,
+        COALESCE(SUM(
+          CASE
+            WHEN te.clock_out IS NOT NULL THEN te.duration_minutes
+            ELSE ROUND(EXTRACT(EPOCH FROM (NOW()-te.clock_in))/60)
+          END
+        ), 0)::integer as week_minutes
+      FROM workers w
+      LEFT JOIN time_entries te ON te.worker_id=w.id
+        AND te.clock_in >= date_trunc('week', CURRENT_TIMESTAMP)
+      WHERE w.active=TRUE
+      GROUP BY w.id, w.name
+      ORDER BY week_minutes DESC
+    `);
+    return r.rows;
+  },
+
+  // Spray records
+  async addSprayRecord(workerId, locationId, product, category, appliedAt, notes) {
+    const r = await pool.query(
+      'INSERT INTO spray_records(worker_id,location_id,product,category,applied_at,notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
+      [workerId, locationId || null, product, category || null, appliedAt, notes || null]
+    );
+    return r.rows[0];
+  },
+  async getWorkerSprayRecords(workerId, startDate, endDate) {
+    let q = `
+      SELECT sr.*,l.name as location_name,w.name as worker_name
+      FROM spray_records sr
+      LEFT JOIN locations l ON sr.location_id=l.id
+      JOIN workers w ON sr.worker_id=w.id
+      WHERE sr.worker_id=$1
+    `;
+    const p = [workerId]; let i = 2;
+    if (startDate) { q += ` AND sr.applied_at::date>=$${i++}`; p.push(startDate); }
+    if (endDate)   { q += ` AND sr.applied_at::date<=$${i++}`; p.push(endDate); }
+    q += ' ORDER BY sr.applied_at DESC LIMIT 50';
+    const r = await pool.query(q, p);
+    return r.rows;
+  },
+  async getAllSprayRecords({ workerId, locationId, startDate, endDate }) {
+    let q = `
+      SELECT sr.*,l.name as location_name,w.name as worker_name
+      FROM spray_records sr
+      LEFT JOIN locations l ON sr.location_id=l.id
+      JOIN workers w ON sr.worker_id=w.id
+      WHERE 1=1
+    `;
+    const p = []; let i = 1;
+    if (workerId)   { q += ` AND sr.worker_id=$${i++}`;          p.push(workerId); }
+    if (locationId) { q += ` AND sr.location_id=$${i++}`;        p.push(locationId); }
+    if (startDate)  { q += ` AND sr.applied_at::date>=$${i++}`;  p.push(startDate); }
+    if (endDate)    { q += ` AND sr.applied_at::date<=$${i++}`;  p.push(endDate); }
+    q += ' ORDER BY sr.applied_at DESC';
+    const r = await pool.query(q, p);
+    return r.rows;
+  },
+
+  // Push notifications
+  async savePushSubscription(workerId, endpoint, subscription) {
+    await pool.query(
+      'INSERT INTO push_subscriptions(worker_id,endpoint,subscription) VALUES($1,$2,$3) ON CONFLICT(endpoint) DO UPDATE SET subscription=$3',
+      [workerId, endpoint, JSON.stringify(subscription)]
+    );
+  },
+  async removePushSubscription(endpoint) {
+    await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [endpoint]);
+  },
+  async getOvertimeChecks() {
+    const r = await pool.query(`
+      SELECT te.id as entry_id, te.clock_in, te.worker_id, l.name as location_name,
+             ps.subscription
+      FROM time_entries te
+      JOIN locations l ON te.location_id=l.id
+      JOIN push_subscriptions ps ON ps.worker_id=te.worker_id
+      WHERE te.clock_out IS NULL
+        AND te.notified_overtime=FALSE
+        AND NOW()-te.clock_in > INTERVAL '8 hours'
+    `);
+    return r.rows;
+  },
+  async markOvertimeNotified(entryId) {
+    await pool.query('UPDATE time_entries SET notified_overtime=TRUE WHERE id=$1', [entryId]);
   },
 };

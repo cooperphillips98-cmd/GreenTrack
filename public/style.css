@@ -153,3 +153,25 @@ tr:hover td{background:var(--gray-50)}
   .container,.container-lg{padding:.75rem}
   .workers-grid{grid-template-columns:1fr}
 }
+
+/* ── Seasonal Prompt ── */
+.seasonal-card{background:linear-gradient(135deg,var(--green-dark),var(--green));color:#fff;border-radius:var(--r);padding:1.1rem 1.25rem;margin-bottom:.875rem;box-shadow:var(--shadow)}
+.seasonal-card h3{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.75;margin-bottom:.5rem}
+.seasonal-card ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.3rem}
+.seasonal-card li{font-size:.875rem;display:flex;align-items:flex-start;gap:.4rem}
+.seasonal-card li::before{content:"→";opacity:.6;flex-shrink:0}
+
+/* ── Spray category badge ── */
+.badge-spray{background:#dbeafe;color:#1e40af}
+.badge-herb{background:#fef9c3;color:#854d0e}
+.badge-fert{background:var(--green-pale);color:var(--green-dark)}
+.badge-fung{background:#fce7f3;color:#9d174d}
+.badge-ins{background:#ffe4e6;color:#9f1239}
+
+/* ── Photo modal ── */
+.photo-modal{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem}
+.photo-modal img{max-width:100%;max-height:85vh;border-radius:var(--r);object-fit:contain}
+
+/* ── Overtime badges (admin) ── */
+.badge-overtime{background:#fee2e2;color:#991b1b}
+.badge-warning-hrs{background:#fef3c7;color:#92400e}
