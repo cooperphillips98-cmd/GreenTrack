@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#1b4332">
@@ -61,6 +61,15 @@
   <!-- TAB: Clock -->
   <div id="tab-clock" class="tab-pane container" style="padding-top:1rem">
 
+    <!-- Greeting (hidden when clocked in) -->
+    <div class="worker-greeting section-hidden" id="worker-greeting">
+      <div>
+        <div class="greeting-sub" id="greeting-msg">Good morning,</div>
+        <div class="greeting-name" id="greeting-name"></div>
+      </div>
+      <div class="greeting-date" id="greeting-date"></div>
+    </div>
+
     <!-- Active job status (shown when clocked in) -->
     <div id="s-in" class="clock-status in section-hidden">
       <span class="clock-icon">▶</span>
@@ -71,32 +80,30 @@
       <div id="s-since" class="clock-sub"></div>
     </div>
 
-    <!-- Clock In form (shown when not clocked in) -->
+    <!-- Clock In form -->
     <div id="form-in" class="card">
-      <div class="card-title">Clock In</div>
 
       <div class="form-group">
-        <label class="form-label">Location <span style="color:var(--red)">*</span></label>
-        <select id="loc-select" class="form-control">
+        <label class="form-label">📍 Location <span style="color:var(--red)">*</span></label>
+        <select id="loc-select" class="form-control" style="font-size:1rem;padding:.8rem .9rem">
           <option value="">— Choose a location —</option>
         </select>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:.5rem">
         <label class="form-label">Job Type <span style="color:var(--red)">*</span></label>
-        <select id="job-type" class="form-control" onchange="handleJobTypeSelect()">
-          <option value="">— What are you doing today? —</option>
-          <option>Mowing</option>
-          <option>Trimming / Edging</option>
-          <option>General Landscaping</option>
-          <option>Cleanup / Leaf Removal</option>
-          <option>Irrigation</option>
-          <option>Spray / Treatment</option>
-          <option>Other</option>
-        </select>
+        <div class="jt-grid">
+          <button class="jt-btn" data-type="Mowing"               onclick="selectJobType(this)"><span class="jt-icon">🌿</span>Mowing</button>
+          <button class="jt-btn" data-type="Trimming / Edging"    onclick="selectJobType(this)"><span class="jt-icon">✂️</span>Trimming</button>
+          <button class="jt-btn" data-type="General Landscaping"  onclick="selectJobType(this)"><span class="jt-icon">🏡</span>Landscaping</button>
+          <button class="jt-btn" data-type="Cleanup / Leaf Removal" onclick="selectJobType(this)"><span class="jt-icon">🍂</span>Cleanup</button>
+          <button class="jt-btn" id="jt-irrigation" data-type="Irrigation"       onclick="selectJobType(this)"><span class="jt-icon">💧</span>Irrigation</button>
+          <button class="jt-btn section-hidden" id="jt-spray" data-type="Spray / Treatment" onclick="selectJobType(this)"><span class="jt-icon">🌱</span>Spray</button>
+          <button class="jt-btn" data-type="Other"               onclick="selectJobType(this)"><span class="jt-icon">⋯</span>Other</button>
+        </div>
       </div>
 
-      <!-- Spray details — only shown when Spray / Treatment selected + spray access -->
+      <!-- Spray details — only shown when Spray selected + spray access -->
       <div id="spray-job-fields" class="section-hidden">
         <div class="job-details-divider">
           <span>Treatment Details <span class="text-muted" style="font-weight:400;font-size:.75rem">(optional)</span></span>
@@ -132,12 +139,12 @@
         </div>
       </div>
 
-      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Clock In</button>
+      <button class="btn btn-success btn-block btn-lg" style="margin-top:.75rem" onclick="clockIn()">▶ Clock In</button>
     </div>
 
-    <!-- Clock Out form (shown when clocked in) -->
+    <!-- Clock Out form -->
     <div id="form-out" class="card section-hidden">
-      <div class="card-title">Clock Out</div>
+      <div class="card-title">Finish Up</div>
       <div class="form-group">
         <label class="form-label">Notes <span class="text-muted" style="font-weight:400">(optional)</span></label>
         <input id="out-notes" type="text" class="form-control" placeholder="e.g. Finished front and back lawn">
@@ -153,7 +160,7 @@
           <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this)">
         </label>
       </div>
-      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ Clock Out</button>
+      <button class="btn btn-danger btn-block btn-lg" style="margin-top:.75rem" onclick="clockOut()">⏹ Clock Out</button>
     </div>
   </div>
 

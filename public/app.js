@@ -5,6 +5,7 @@ let deferredPrompt = null;
 let photoData = null;
 let weekEntries = [];
 let sprayProducts = [];
+let selectedJobType = null;
 
 // Service type → reapply suggestion (days)
 const REAPPLY_DAYS = {
@@ -103,12 +104,9 @@ async function showApp() {
   const sprayNav = document.getElementById('nav-spray');
   if (sprayNav) sprayNav.classList.toggle('section-hidden', !worker.sprayAccess);
 
-  // Remove "Spray / Treatment" job type option for workers without spray access
-  if (!worker.sprayAccess) {
-    const opt = Array.from(document.querySelectorAll('#job-type option'))
-      .find(o => o.value === 'Spray / Treatment');
-    if (opt) opt.remove();
-  }
+  // Show Spray button only for spray workers; swap with Irrigation so grid stays 2×3
+  if (worker.sprayAccess) { hide('jt-irrigation'); show('jt-spray'); }
+  updateGreeting();
 
   await Promise.all([loadLocations(), loadClients(), loadProductsForJobForm()]);
   await refreshStatus();
@@ -165,9 +163,11 @@ async function loadProductsForJobForm() {
     `<option value="${p.id}" data-reapply-min="${p.reapply_min_days||''}" data-reapply-max="${p.reapply_max_days||''}">${esc(p.name)}</option>`));
 }
 
-function handleJobTypeSelect() {
-  const jobType = document.getElementById('job-type').value;
-  const isSpray = jobType === 'Spray / Treatment';
+function selectJobType(btn) {
+  selectedJobType = btn.dataset.type;
+  document.querySelectorAll('.jt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  const isSpray = selectedJobType === 'Spray / Treatment';
   document.getElementById('spray-job-fields').classList.toggle('section-hidden', !isSpray);
   if (!isSpray) {
     document.getElementById('job-client').value = '';
@@ -177,6 +177,17 @@ function handleJobTypeSelect() {
     document.getElementById('job-client-phone').value = '';
     hide('new-client-wrap');
   }
+}
+
+function updateGreeting() {
+  const h = new Date().getHours();
+  const msg = h < 12 ? 'Good morning,' : h < 17 ? 'Good afternoon,' : 'Good evening,';
+  const el = document.getElementById('greeting-msg');
+  const nameEl = document.getElementById('greeting-name');
+  const dateEl = document.getElementById('greeting-date');
+  if (el) el.textContent = msg;
+  if (nameEl) nameEl.textContent = worker.name;
+  if (dateEl) dateEl.textContent = new Date().toLocaleDateString([], {weekday:'long',month:'long',day:'numeric'});
 }
 
 function handleClientSelect() {
@@ -240,7 +251,7 @@ async function refreshStatus() {
 function renderStatus() {
   clearInterval(timerInterval);
   if (currentEntry) {
-    show('s-in');
+    show('s-in'); hide('worker-greeting');
     hide('form-in'); show('form-out');
     const pendingJob = getPendingJob();
     document.getElementById('s-client').textContent = pendingJob?.clientName || pendingJob?.jobType || 'Working';
@@ -251,15 +262,18 @@ function renderStatus() {
     const tick = () => { document.getElementById('s-timer').textContent = fmtElapsed(Date.now() - start); };
     tick(); timerInterval = setInterval(tick, 1000);
   } else {
-    hide('s-in');
+    hide('s-in'); show('worker-greeting');
     show('form-in'); hide('form-out');
+    selectedJobType = null;
+    document.querySelectorAll('.jt-btn').forEach(b => b.classList.remove('selected'));
+    hide('spray-job-fields');
   }
 }
 
 async function clockIn() {
   const locationId = document.getElementById('loc-select').value;
   if (!locationId) { showAlert('Please select a job site.', 'error'); return; }
-  const jobType = document.getElementById('job-type').value;
+  const jobType = selectedJobType;
   if (!jobType) { showAlert('Please select a job type.', 'error'); return; }
 
   // Collect spray-specific details (only when Spray / Treatment is selected)
@@ -313,8 +327,9 @@ async function clockIn() {
     locationId,
   }));
 
-  // Reset job type selector
-  document.getElementById('job-type').value = '';
+  // Reset job type buttons
+  selectedJobType = null;
+  document.querySelectorAll('.jt-btn').forEach(b => b.classList.remove('selected'));
   hide('spray-job-fields');
 
   await refreshStatus();
