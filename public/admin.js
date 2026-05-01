@@ -119,14 +119,70 @@ async function loadLocations() {
   fSel.innerHTML = '<option value="">All Locations</option>' +
     locs.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   const tbody = document.getElementById('locations-tbody');
-  if (!locs.length) { tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No locations yet</td></tr>'; return; }
-  tbody.innerHTML = locs.map(l => `
-    <tr>
+  if (!locs.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No locations yet</td></tr>'; return; }
+  tbody.innerHTML = locs.map(l => {
+    const hasGeofence = l.geofence_lat && l.geofence_lng;
+    const geofenceBadge = hasGeofence
+      ? `<span class="badge badge-success">✓ ${l.geofence_radius || 150}m radius</span>`
+      : `<span class="text-muted">Not set</span>`;
+    return `<tr>
       <td><strong>${esc(l.name)}</strong></td>
       <td>${l.address ? esc(l.address) : '<span class="text-muted">—</span>'}</td>
+      <td>${geofenceBadge}</td>
       <td>${fmtDate(l.created_at)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="removeLocation(${l.id},'${esc(l.name)}')">Remove</button></td>
-    </tr>`).join('');
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openGeofenceModal(${l.id},'${esc(l.name)}',${l.geofence_lat || 'null'},${l.geofence_lng || 'null'},${l.geofence_radius || 150})">📍 Geofence</button>
+        <button class="btn btn-danger btn-sm" onclick="removeLocation(${l.id},'${esc(l.name)}')">Remove</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openGeofenceModal(id, name, lat, lng, radius) {
+  document.getElementById('gf-loc-id').value = id;
+  document.getElementById('gf-loc-name').textContent = name;
+  document.getElementById('gf-lat').value = lat || '';
+  document.getElementById('gf-lng').value = lng || '';
+  document.getElementById('gf-radius').value = radius || 150;
+  document.getElementById('gf-location-status').textContent = '';
+  document.getElementById('gf-clear-btn').style.display = (lat && lng) ? '' : 'none';
+  openModal('m-set-geofence');
+}
+
+function useMyLocationForGeofence() {
+  const status = document.getElementById('gf-location-status');
+  status.textContent = 'Getting location…';
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('gf-lat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('gf-lng').value = pos.coords.longitude.toFixed(6);
+      status.textContent = `Accuracy: ±${Math.round(pos.coords.accuracy)}m`;
+    },
+    () => { status.textContent = 'Location unavailable. Check permissions.'; },
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+}
+
+async function saveGeofence() {
+  const id = document.getElementById('gf-loc-id').value;
+  const lat = parseFloat(document.getElementById('gf-lat').value);
+  const lng = parseFloat(document.getElementById('gf-lng').value);
+  const radius = parseInt(document.getElementById('gf-radius').value) || 150;
+  if (!lat || !lng) { showAlert('Enter coordinates or use "Use My Location".', 'error'); return; }
+  await put(`/api/admin/locations/${id}`, { geofence_lat: lat, geofence_lng: lng, geofence_radius: radius });
+  closeModal('m-set-geofence');
+  loadLocations();
+  showAlert('Geofence saved.', 'success');
+}
+
+async function clearGeofence() {
+  const id = document.getElementById('gf-loc-id').value;
+  const name = document.getElementById('gf-loc-name').textContent;
+  if (!confirm(`Remove geofence from "${name}"? Workers will be able to clock in from anywhere.`)) return;
+  await put(`/api/admin/locations/${id}`, { geofence_lat: null, geofence_lng: null, geofence_radius: null });
+  closeModal('m-set-geofence');
+  loadLocations();
+  showAlert('Geofence removed.', 'success');
 }
 
 async function loadEntries() {

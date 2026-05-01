@@ -25,6 +25,9 @@ async function init() {
       active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE locations ADD COLUMN IF NOT EXISTS geofence_lat REAL;
+    ALTER TABLE locations ADD COLUMN IF NOT EXISTS geofence_lng REAL;
+    ALTER TABLE locations ADD COLUMN IF NOT EXISTS geofence_radius INTEGER DEFAULT 150;
     CREATE TABLE IF NOT EXISTS time_entries (
       id SERIAL PRIMARY KEY,
       worker_id INTEGER REFERENCES workers(id),
@@ -87,6 +90,16 @@ module.exports = {
   },
   async deleteLocation(id) {
     await pool.query('UPDATE locations SET active=FALSE WHERE id=$1', [id]);
+  },
+  async getLocationById(id) {
+    const r = await pool.query('SELECT * FROM locations WHERE id=$1', [id]);
+    return r.rows[0] || null;
+  },
+  async setLocationGeofence(id, lat, lng, radius) {
+    await pool.query(
+      'UPDATE locations SET geofence_lat=$1, geofence_lng=$2, geofence_radius=$3 WHERE id=$4',
+      [lat || null, lng || null, radius || 150, id]
+    );
   },
   async clockIn(workerId, locationId, lat, lng) {
     const r = await pool.query(

@@ -5,6 +5,15 @@ const db = require('./database');
 
 const app = express();
 app.use(express.json());
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/api/auth/login', async (req, res) => {
@@ -33,6 +42,19 @@ app.post('/api/entries/clock-in', async (req, res) => {
   const { workerId, locationId, latitude, longitude } = req.body;
   if (!workerId || !locationId) return res.status(400).json({ success: false, message: 'Missing required fields.' });
   if (await db.getCurrentEntry(workerId)) return res.status(400).json({ success: false, message: 'Already clocked in.' });
+
+  const location = await db.getLocationById(locationId);
+  if (location && location.geofence_lat && location.geofence_lng) {
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ success: false, message: 'This location requires GPS verification. Please allow location access and try again.' });
+    }
+    const distance = Math.round(haversineMeters(latitude, longitude, location.geofence_lat, location.geofence_lng));
+    const radius = location.geofence_radius || 150;
+    if (distance > radius) {
+      return res.status(400).json({ success: false, message: `You are ${distance}m from ${location.name}. Must be within ${radius}m to clock in.` });
+    }
+  }
+
   const entry = await db.clockIn(workerId, locationId, latitude, longitude);
   res.json({ success: true, entry });
 });
@@ -94,6 +116,12 @@ app.post('/api/admin/locations', async (req, res) => {
   const { name, address } = req.body;
   if (!name) return res.status(400).json({ success: false, message: 'Name required.' });
   res.json({ success: true, location: await db.addLocation(name.trim(), address) });
+});
+
+app.put('/api/admin/locations/:id', async (req, res) => {
+  const { geofence_lat, geofence_lng, geofence_radius } = req.body;
+  await db.setLocationGeofence(req.params.id, geofence_lat, geofence_lng, geofence_radius);
+  res.json({ success: true });
 });
 
 app.delete('/api/admin/locations/:id', async (req, res) => {
