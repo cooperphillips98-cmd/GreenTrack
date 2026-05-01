@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#1b4332">
@@ -200,41 +200,81 @@
   <div id="tab-spray" class="tab-pane section-hidden container" style="padding-top:1rem">
     <div id="seasonal-prompt" class="seasonal-card"></div>
     <div class="card">
-      <div class="card-title">Log Application</div>
-      <div class="form-group">
-        <label class="form-label">Job Site / Client</label>
-        <select id="sp-loc" class="form-control">
-          <option value="">— Select location —</option>
-        </select>
+      <div class="card-title">Add Spray Job</div>
+
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Client Name</label>
+          <input id="sp-client-name" type="text" class="form-control" placeholder="e.g. Johnson Residence">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input id="sp-client-phone" type="tel" class="form-control" placeholder="(555) 000-0000">
+        </div>
       </div>
+
       <div class="form-group">
-        <label class="form-label">Category</label>
-        <select id="sp-cat" class="form-control" onchange="updateProductList()">
-          <option value="">— Select category —</option>
-          <option>Pre-emergent</option>
-          <option>Weed Control</option>
-          <option>Fertilizer</option>
-          <option>Fungicide</option>
-          <option>Pest Control</option>
-          <option>Other</option>
-        </select>
+        <label class="form-label">Address</label>
+        <input id="sp-address" type="text" class="form-control" placeholder="123 Main St">
       </div>
+
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Service Type <span style="color:var(--red)">*</span></label>
+          <select id="sp-cat" class="form-control" onchange="updateProductList()">
+            <option value="">— Select —</option>
+            <option>Pre-emergent</option>
+            <option>Weed Control</option>
+            <option>Fertilizer</option>
+            <option>Fungicide</option>
+            <option>Pest Control</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Used <span style="color:var(--red)">*</span></label>
+          <select id="sp-prod" class="form-control">
+            <option value="">— Select category first —</option>
+          </select>
+          <input id="sp-prod-custom" type="text" class="form-control section-hidden" placeholder="Product name" style="margin-top:.4rem">
+        </div>
+      </div>
+
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Job Site</label>
+          <select id="sp-loc" class="form-control">
+            <option value="">— Select location —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input id="sp-date" type="date" class="form-control">
+        </div>
+      </div>
+
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Start Time</label>
+          <input id="sp-start-time" type="time" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Time</label>
+          <input id="sp-end-time" type="time" class="form-control">
+        </div>
+      </div>
+
       <div class="form-group">
-        <label class="form-label">Product</label>
-        <select id="sp-prod" class="form-control">
-          <option value="">— Select category first —</option>
-        </select>
-        <input id="sp-prod-custom" type="text" class="form-control section-hidden" placeholder="Enter product name" style="margin-top:.4rem">
+        <label class="form-label">Next Service Date</label>
+        <input id="sp-next-date" type="date" class="form-control">
       </div>
+
       <div class="form-group">
-        <label class="form-label">Date &amp; Time Applied</label>
-        <input id="sp-date" type="datetime-local" class="form-control">
+        <label class="form-label">Notes</label>
+        <input id="sp-notes" type="text" class="form-control" placeholder="Any additional notes">
       </div>
-      <div class="form-group">
-        <label class="form-label">Notes (optional)</label>
-        <input id="sp-notes" type="text" class="form-control" placeholder="e.g. Front lawn only, 2 bags">
-      </div>
-      <button class="btn btn-primary btn-block btn-lg" onclick="logSpray()">Log Application</button>
+
+      <button class="btn btn-primary btn-block btn-lg" onclick="logSpray()">Save Spray Job</button>
     </div>
     <div class="card">
       <div class="card-title">Recent Applications</div>

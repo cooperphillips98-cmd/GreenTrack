@@ -63,11 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('inp-pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
   document.getElementById('inp-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inp-pin').focus(); });
   if (isIOS() && !isInStandaloneMode()) show('ios-banner');
-  // default spray datetime to now
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  // default spray date to today and start time to now
   const spDate = document.getElementById('sp-date');
-  if (spDate) spDate.value = now.toISOString().slice(0, 16);
+  if (spDate) spDate.value = new Date().toISOString().split('T')[0];
+  const spStart = document.getElementById('sp-start-time');
+  if (spStart) { const n = new Date(); spStart.value = `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
 });
 
 async function login() {
@@ -528,26 +528,43 @@ function updateProductList() {
 }
 
 async function logSpray() {
-  const locationId = document.getElementById('sp-loc').value || null;
-  const cat      = document.getElementById('sp-cat').value;
-  const prodSel  = document.getElementById('sp-prod').value;
-  const prodCustom = document.getElementById('sp-prod-custom').value.trim();
-  const product  = (prodSel === 'Other' || !prodSel) ? prodCustom : prodSel;
-  const appliedAt = document.getElementById('sp-date').value;
-  const notes    = document.getElementById('sp-notes').value.trim();
+  const locationId  = document.getElementById('sp-loc').value || null;
+  const cat         = document.getElementById('sp-cat').value;
+  const prodSel     = document.getElementById('sp-prod').value;
+  const prodCustom  = document.getElementById('sp-prod-custom').value.trim();
+  const product     = (prodSel === 'Other' || !prodSel) ? prodCustom : prodSel;
+  const clientName  = document.getElementById('sp-client-name').value.trim();
+  const clientPhone = document.getElementById('sp-client-phone').value.trim();
+  const clientAddress = document.getElementById('sp-address').value.trim();
+  const dateVal     = document.getElementById('sp-date').value;
+  const startTime   = document.getElementById('sp-start-time').value;
+  const endTime     = document.getElementById('sp-end-time').value;
+  const nextServiceDate = document.getElementById('sp-next-date').value || null;
+  const notes       = document.getElementById('sp-notes').value.trim();
 
-  if (!cat)     { showAlert('Please select a category.', 'error'); return; }
+  if (!cat)     { showAlert('Please select a service type.', 'error'); return; }
   if (!product) { showAlert('Please select or enter a product.', 'error'); return; }
 
+  const appliedAt = dateVal
+    ? (startTime ? new Date(`${dateVal}T${startTime}`).toISOString() : new Date(dateVal + 'T12:00:00').toISOString())
+    : new Date().toISOString();
+
   const r = await post('/api/spray/records', {
-    workerId: worker.id, locationId, product, category: cat,
-    appliedAt: appliedAt ? new Date(appliedAt).toISOString() : new Date().toISOString(), notes
+    workerId: worker.id, locationId, clientName, clientPhone, clientAddress,
+    product, category: cat, appliedAt, notes, nextServiceDate
   });
+
   if (r.success) {
+    document.getElementById('sp-client-name').value = '';
+    document.getElementById('sp-client-phone').value = '';
+    document.getElementById('sp-address').value = '';
     document.getElementById('sp-cat').value = '';
     document.getElementById('sp-prod').innerHTML = '<option value="">— Select category first —</option>';
     document.getElementById('sp-prod-custom').value = '';
     hide('sp-prod-custom');
+    document.getElementById('sp-start-time').value = '';
+    document.getElementById('sp-end-time').value = '';
+    document.getElementById('sp-next-date').value = '';
     document.getElementById('sp-notes').value = '';
     showAlert('Application logged!', 'success');
     loadSprayHistory();
@@ -563,10 +580,11 @@ async function loadSprayHistory() {
   el.innerHTML = records.slice(0, 15).map(r => `
     <div class="entry-row">
       <div class="entry-main">
-        <div class="entry-loc">${esc(r.product)}</div>
+        <div class="entry-loc">${esc(r.client_name || r.product)}</div>
         <div>${sprayBadge(r.category)}</div>
       </div>
       <div class="entry-meta">
+        <span>${esc(r.product)}</span>
         <span>${fmtDate(r.applied_at)}</span>
         ${r.location_name ? `<span>📍 ${esc(r.location_name)}</span>` : ''}
         ${r.notes ? `<span>📝 ${esc(r.notes)}</span>` : ''}

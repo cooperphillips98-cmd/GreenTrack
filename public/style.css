@@ -93,6 +93,11 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .week-stat-value{font-size:3rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
 .week-stat-label{font-size:.85rem;opacity:.8;margin-top:.35rem}
 
+/* ── Two-column form row ── */
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.form-row-2 .form-group{margin-bottom:.875rem}
+@media(max-width:400px){.form-row-2{grid-template-columns:1fr}}
+
 /* ── Worker Greeting ── */
 .worker-greeting{background:linear-gradient(135deg,var(--green-dark),var(--green));border-radius:var(--r);padding:1.25rem;margin-bottom:.875rem;color:#fff;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between}
 .greeting-sub{font-size:.8rem;opacity:.75;margin-bottom:.1rem}
