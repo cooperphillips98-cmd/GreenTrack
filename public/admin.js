@@ -1,7 +1,8 @@
 let allEntries = [];
 let activeWorkers = [];
 let allLocations = [];
-let currentSprayFilter = 'all';
+let allSprayJobs = [];
+let allUpcoming = [];
 let MAPBOX_TOKEN = null;
 let propertyMap = null;
 let drawnItems = null;
@@ -9,10 +10,10 @@ let chartHours = null;
 let chartTypes = null;
 
 const ADMIN_SEASONAL = [
-  { months: [0,1],   label: 'Winter',          tips: ['Dormant oil on trees & shrubs', 'Pre-emergent planning & ordering', 'Client follow-up calls', 'Equipment maintenance'] },
-  { months: [2,3,4], label: 'Spring',           tips: ['Pre-emergent herbicide (crabgrass)', 'Round 1 fertilizer application', 'Post-emergent broadleaf control', 'Fire ant bait'] },
-  { months: [5,6,7], label: 'Summer',           tips: ['Grub control (June–July)', 'Fungicide if brown patch appears', 'Round 2–3 fertilizer', 'Weed spot treatments'] },
-  { months: [8,9],   label: 'Fall',             tips: ['Pre-emergent for winter weeds', 'Round 3–4 fertilizer', 'Aeration & overseeding', 'Broadleaf weed cleanup'] },
+  { months: [0,1],   label: 'Winter',       tips: ['Dormant oil on trees & shrubs', 'Pre-emergent planning & ordering', 'Client follow-up calls', 'Equipment maintenance'] },
+  { months: [2,3,4], label: 'Spring',        tips: ['Pre-emergent herbicide (crabgrass)', 'Round 1 fertilizer application', 'Post-emergent broadleaf control', 'Fire ant bait'] },
+  { months: [5,6,7], label: 'Summer',        tips: ['Grub control (June–July)', 'Fungicide if brown patch appears', 'Round 2–3 fertilizer', 'Weed spot treatments'] },
+  { months: [8,9],   label: 'Fall',          tips: ['Pre-emergent for winter weeds', 'Round 3–4 fertilizer', 'Aeration & overseeding', 'Broadleaf weed cleanup'] },
   { months: [10,11], label: 'Late Fall/Winter', tips: ['Winterizer fertilizer', 'Final pre-emergent if needed', 'Equipment winterization', 'Schedule spring clients early'] },
 ];
 
@@ -27,9 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function copyAppUrl() {
-  navigator.clipboard.writeText(window.location.origin)
+  const url = window.location.origin;
+  navigator.clipboard.writeText(url)
     .then(() => showAlert('Link copied!', 'success'))
-    .catch(() => showAlert('Copy: ' + window.location.origin, 'success'));
+    .catch(() => showAlert('Copy: ' + url, 'success'));
 }
 
 async function adminLogin() {
@@ -54,11 +56,7 @@ function adminSignOut() {
 async function showAdminApp() {
   hide('admin-login'); show('admin-app');
   try { const cfg = await get('/api/config'); MAPBOX_TOKEN = cfg.mapboxToken; } catch {}
-  await Promise.all([
-    loadStats(), loadActive(), loadOvertime(), loadCharts(),
-    loadWorkers(), loadLocations(), loadClientsAdmin(), loadProductsAdmin(),
-    loadReminders(),
-  ]);
+  await Promise.all([loadStats(), loadActive(), loadOvertime(), loadCharts(), loadWorkers(), loadLocations(), loadClientsAdmin(), loadProductsAdmin()]);
   setInterval(updateTimers, 1000);
   setInterval(() => {
     if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) {
@@ -67,18 +65,32 @@ async function showAdminApp() {
   }, 30000);
 }
 
-// ── Tab Navigation ────────────────────────────────
+// ── Main Tab Navigation ───────────────────────────
 
 function showTab(btn, tab) {
-  ['dashboard','clients','jobs','spray','workers','settings'].forEach(t => {
+  ['dashboard','entries','spraying','workers','locations','settings'].forEach(t => {
     document.getElementById('tab-' + t).classList.add('section-hidden');
   });
   document.querySelectorAll('.admin-nav > .nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.remove('section-hidden');
   btn.classList.add('active');
-  if (tab === 'clients') loadClientsAdmin();
-  if (tab === 'spray')   { renderAdminSeasonal(); loadReminders(); loadSpraySchedule(currentSprayFilter); }
-  if (tab === 'settings') { loadLocations(); loadProductsAdmin(); }
+  if (tab === 'entries')  loadEntries();
+  if (tab === 'spraying') { renderAdminSeasonal(); loadAdminUpcoming(); loadClientsAdmin(); loadProductsAdmin(); }
+}
+
+// ── Spray Sub-Nav ─────────────────────────────────
+
+function showSpraySection(btn, section) {
+  ['spray-overview','spray-jobs','spray-clients','spray-products'].forEach(s => {
+    document.getElementById(s).classList.add('section-hidden');
+  });
+  document.querySelectorAll('#tab-spraying .admin-nav .nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(section).classList.remove('section-hidden');
+  btn.classList.add('active');
+  if (section === 'spray-overview')  { renderAdminSeasonal(); loadAdminUpcoming(); }
+  if (section === 'spray-jobs')      loadSprayJobs();
+  if (section === 'spray-clients')   loadClientsAdmin();
+  if (section === 'spray-products')  loadProductsAdmin();
 }
 
 // ── Dashboard ─────────────────────────────────────
@@ -158,14 +170,18 @@ async function loadCharts() {
   const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dayHours = Array(7).fill(0);
   const typeMap = {};
+
   entries.forEach(e => {
-    if (e.duration_minutes) dayHours[new Date(e.clock_in).getDay()] += e.duration_minutes / 60;
+    if (e.duration_minutes) {
+      dayHours[new Date(e.clock_in).getDay()] += e.duration_minutes / 60;
+    }
     const jt = e.job_type || 'Other';
     typeMap[jt] = (typeMap[jt] || 0) + 1;
   });
 
   const COLORS = ['#52b788','#2d6a4f','#74c69d','#d97706','#3b82f6','#8b5cf6','#dc2626','#ec4899'];
 
+  // Hours bar chart
   const ctxH = document.getElementById('chart-hours');
   if (ctxH) {
     if (chartHours) chartHours.destroy();
@@ -186,6 +202,7 @@ async function loadCharts() {
     });
   }
 
+  // Job type doughnut chart
   const ctxT = document.getElementById('chart-types');
   const emptyEl = document.getElementById('chart-types-empty');
   if (ctxT) {
@@ -218,7 +235,7 @@ async function forceClockOut(id, name) {
   if (r.success) { showAlert(`${name} clocked out.`, 'success'); loadActive(); loadStats(); }
 }
 
-// ── Jobs Tab ──────────────────────────────────────
+// ── Time Entries ──────────────────────────────────
 
 async function loadEntries() {
   const params = new URLSearchParams();
@@ -234,104 +251,148 @@ async function loadEntries() {
   const tbody = document.getElementById('entries-tbody');
   if (!allEntries.length) { tbody.innerHTML = '<tr><td colspan="9" class="table-empty">No entries found</td></tr>'; return; }
   tbody.innerHTML = allEntries.map(entry => {
+    const hasGPS = entry.clock_in_lat && entry.clock_in_lng;
+    const gps = hasGPS
+      ? `<a href="https://maps.google.com/?q=${entry.clock_in_lat},${entry.clock_in_lng}" target="_blank" class="badge badge-success">📍 Map</a>`
+      : '<span class="text-muted">—</span>';
     const active = !entry.clock_out;
     return `<tr>
       <td>${fmtDate(entry.clock_in)}</td>
       <td><strong>${esc(entry.worker_name)}</strong></td>
       <td>${esc(entry.location_name)}</td>
-      <td>${entry.job_type ? `<span class="badge badge-gray">${esc(entry.job_type)}</span>` : '<span class="text-muted">—</span>'}</td>
       <td>${fmtTime(entry.clock_in)}</td>
       <td>${entry.clock_out ? fmtTime(entry.clock_out) : '<span class="badge badge-success">Active</span>'}</td>
       <td>${entry.duration_minutes ? '<strong>' + fmtDur(entry.duration_minutes) + '</strong>' : '—'}</td>
+      <td>${gps}</td>
       <td>${entry.notes ? esc(entry.notes) : '<span class="text-muted">—</span>'}</td>
-      <td>${active ? `<button class="btn btn-warning btn-sm" onclick="forceClockOut(${entry.id},'${esc(entry.worker_name)}')">Clock Out</button>` : (entry.has_photo ? `<button class="btn btn-outline btn-sm" onclick="viewEntryPhoto(${entry.id})">📷</button>` : '')}</td>
+      <td>${active ? `<button class="btn btn-warning btn-sm" onclick="forceClockOut(${entry.id},'${esc(entry.worker_name)}')">Clock Out</button>` : ''}</td>
     </tr>`;
   }).join('');
 }
 
 function exportCSV() {
   if (!allEntries.length) { showAlert('No entries to export. Apply filters first.', 'warning'); return; }
-  const hdr = ['Date','Worker','Location','Job Type','Clock In','Clock Out','Duration (min)','Duration (hrs)','Notes'];
+  const hdr = ['Date','Worker','Location','Clock In','Clock Out','Duration (min)','Duration (hrs)','GPS Lat','GPS Lng','Notes'];
   const rows = allEntries.map(e => [
-    fmtDate(e.clock_in), e.worker_name, e.location_name, e.job_type || '',
+    fmtDate(e.clock_in), e.worker_name, e.location_name,
     fmtDateTime(e.clock_in), e.clock_out ? fmtDateTime(e.clock_out) : '',
     e.duration_minutes || '', e.duration_minutes ? (e.duration_minutes/60).toFixed(2) : '',
-    e.notes || ''
+    e.clock_in_lat || '', e.clock_in_lng || '', e.notes || ''
   ]);
   downloadCSV([hdr,...rows], `time-entries-${today()}.csv`);
 }
 
-async function viewEntryPhoto(id) {
-  const data = await get(`/api/entries/${id}/photo`);
-  if (!data.photo) { showAlert('No photo for this entry.', 'error'); return; }
-  document.getElementById('photo-modal-img').src = data.photo;
-  show('photo-modal');
-}
-function closePModal() { hide('photo-modal'); document.getElementById('photo-modal-img').src = ''; }
+// ── Spraying: Overview ────────────────────────────
 
-// ── Clients Tab ───────────────────────────────────
+function renderAdminSeasonal() {
+  const month = new Date().getMonth();
+  const season = ADMIN_SEASONAL.find(s => s.months.includes(month));
+  const el = document.getElementById('admin-seasonal-prompt');
+  if (!season || !el) return;
+  el.innerHTML = `<h3>🗓 ${season.label} — Recommended Services This Month</h3>
+    <ul>${season.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
+}
+
+async function loadAdminUpcoming() {
+  allUpcoming = await get('/api/admin/spray?upcoming=true');
+  const el = document.getElementById('admin-upcoming-list');
+  if (!allUpcoming.length) { el.innerHTML = '<div class="table-empty">No upcoming follow-ups in the next 30 days</div>'; return; }
+  const today = new Date(); today.setHours(0,0,0,0);
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Due Date</th><th>Status</th><th>Client</th><th>Address</th><th>Service</th><th>Product</th><th>Worker</th></tr></thead>
+    <tbody>${allUpcoming.map(r => {
+      const due = new Date(r.next_service_date + 'T12:00:00');
+      due.setHours(0,0,0,0);
+      const diff = Math.round((due - today) / 86400000);
+      const status = diff < 0 ? 'Overdue' : diff === 0 ? 'Due Today' : diff <= 7 ? 'Due Soon' : 'Upcoming';
+      const badgeCls = diff < 0 ? 'badge-overtime' : diff <= 7 ? 'badge-warning-hrs' : 'badge-success';
+      return `<tr>
+        <td>${fmtDateShort(r.next_service_date)}</td>
+        <td><span class="badge ${badgeCls}">${status}</span></td>
+        <td><strong>${esc(r.client_name || '—')}</strong>${r.client_phone ? `<br><span class="text-muted" style="font-size:.75rem">${esc(r.client_phone)}</span>` : ''}</td>
+        <td>${esc(r.client_address || r.location_name || '—')}</td>
+        <td>${r.category ? `<span class="badge badge-gray">${esc(r.category)}</span>` : '—'}</td>
+        <td>${esc(r.product || '—')}</td>
+        <td>${esc(r.worker_name)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+function exportUpcomingCSV() {
+  if (!allUpcoming.length) { showAlert('No upcoming jobs to export.', 'warning'); return; }
+  const hdr = ['Due Date','Client','Phone','Address','Service','Product','Worker'];
+  const rows = allUpcoming.map(r => [fmtDateShort(r.next_service_date), r.client_name||'', r.client_phone||'', r.client_address||r.location_name||'', r.category||'', r.product||'', r.worker_name]);
+  downloadCSV([hdr,...rows], `upcoming-${today()}.csv`);
+}
+
+// ── Spraying: Jobs ────────────────────────────────
+
+async function loadSprayJobs() {
+  const params = new URLSearchParams();
+  const w = document.getElementById('spj-worker')?.value;
+  const c = document.getElementById('spj-client')?.value;
+  const s = document.getElementById('spj-start')?.value;
+  const e = document.getElementById('spj-end')?.value;
+  if (w) params.set('workerId', w);
+  if (c) params.set('clientId', c);
+  if (s) params.set('startDate', s);
+  if (e) params.set('endDate', e);
+  allSprayJobs = await get('/api/admin/spray?' + params);
+  const tbody = document.getElementById('spray-jobs-tbody');
+  if (!allSprayJobs.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="table-empty">No jobs found. Set filters and click Filter.</td></tr>'; return;
+  }
+  tbody.innerHTML = allSprayJobs.map(r => `<tr>
+    <td>${fmtDate(r.applied_at)}</td>
+    <td>${esc(r.worker_name)}</td>
+    <td><strong>${esc(r.client_name||'—')}</strong>${r.client_phone ? `<br><span class="text-muted" style="font-size:.75rem">${esc(r.client_phone)}</span>` : ''}</td>
+    <td>${esc(r.location_name||r.client_address||'—')}</td>
+    <td>${r.category ? `<span class="badge badge-gray">${esc(r.category)}</span>` : '—'}</td>
+    <td>${esc(r.product)}</td>
+    <td>${r.duration_minutes ? fmtDur(r.duration_minutes) : '—'}</td>
+    <td>${r.notes ? esc(r.notes) : '<span class="text-muted">—</span>'}</td>
+    <td>${r.next_service_date ? fmtDateShort(r.next_service_date) : '<span class="text-muted">—</span>'}</td>
+  </tr>`).join('');
+}
+
+function exportSprayCSV() {
+  if (!allSprayJobs.length) { showAlert('Load jobs first.', 'warning'); return; }
+  const hdr = ['Date','Worker','Client','Phone','Location','Service','Product','Duration (min)','Notes','Next Visit'];
+  const rows = allSprayJobs.map(r => [
+    fmtDate(r.applied_at), r.worker_name, r.client_name||'', r.client_phone||'',
+    r.location_name||r.client_address||'', r.category||'', r.product,
+    r.duration_minutes||'', r.notes||'', r.next_service_date||''
+  ]);
+  downloadCSV([hdr,...rows], `spray-jobs-${today()}.csv`);
+}
+
+// ── Spraying: Clients ─────────────────────────────
 
 let clientsList = [];
 
 async function loadClientsAdmin() {
   clientsList = await get('/api/admin/clients');
-
-  // Populate New Spray Job client dropdown
-  const nsClient = document.getElementById('ns-client');
-  if (nsClient) {
-    const opts = clientsList.map(c => `<option value="${c.id}" data-address="${esc(c.address||'')}">${esc(c.name)}</option>`).join('');
-    nsClient.innerHTML = '<option value="">— Select client —</option>' + opts;
+  // Populate spray job client filter
+  const spjC = document.getElementById('spj-client');
+  if (spjC) {
+    const opts = clientsList.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    spjC.innerHTML = '<option value="">All Clients</option>' + opts;
   }
-
-  renderClientsTable(clientsList);
-}
-
-function renderClientsTable(list) {
   const tbody = document.getElementById('clients-tbody');
   if (!tbody) return;
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No clients found</td></tr>'; return; }
-  tbody.innerHTML = list.map(c => `<tr>
+  if (!clientsList.length) { tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No clients yet</td></tr>'; return; }
+  tbody.innerHTML = clientsList.map(c => `<tr>
     <td><strong>${esc(c.name)}</strong>${c.notes ? `<br><span class="text-muted" style="font-size:.75rem">${esc(c.notes)}</span>` : ''}</td>
     <td>${c.phone ? esc(c.phone) : '<span class="text-muted">—</span>'}</td>
     <td>${c.address ? esc(c.address) : '<span class="text-muted">—</span>'}</td>
     <td>${c.last_service_date ? fmtDate(c.last_service_date) : '<span class="text-muted">—</span>'}</td>
     <td>${c.next_service_date ? `<span class="badge badge-success">${fmtDateShort(c.next_service_date)}</span>` : '<span class="text-muted">—</span>'}</td>
-    <td style="white-space:nowrap">
-      <button class="btn btn-outline btn-sm" onclick="showClientHistory(${c.id},'${esc(c.name)}')">History</button>
+    <td>
       <button class="btn btn-outline btn-sm" onclick="openEditClient(${c.id})">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="removeClient(${c.id},'${esc(c.name)}')">Delete</button>
     </td>
   </tr>`).join('');
-}
-
-function filterClientList(query) {
-  const q = query.toLowerCase();
-  const filtered = q ? clientsList.filter(c =>
-    c.name.toLowerCase().includes(q) ||
-    (c.phone || '').includes(q) ||
-    (c.address || '').toLowerCase().includes(q)
-  ) : clientsList;
-  renderClientsTable(filtered);
-}
-
-async function showClientHistory(id, name) {
-  const records = await get(`/api/clients/${id}/history`);
-  document.getElementById('hist-panel-title').textContent = name + ' — Service History';
-  const el = document.getElementById('hist-panel-body');
-  if (!records.length) { el.innerHTML = '<div class="table-empty">No service history yet</div>'; }
-  else {
-    el.innerHTML = records.map(r => `
-      <div class="client-hist-row">
-        <div class="hist-dot">${(r.category || r.product || '?').slice(0,2).toUpperCase()}</div>
-        <div>
-          <div class="hist-product">${esc(r.product || r.category || 'Service')}</div>
-          <div class="hist-date">${fmtDate(r.applied_at || r.created_at)}${r.worker_name ? ' · ' + esc(r.worker_name) : ''}</div>
-          ${r.notes ? `<div class="hist-notes">${esc(r.notes)}</div>` : ''}
-        </div>
-      </div>`).join('');
-  }
-  show('client-hist-panel');
-  document.getElementById('client-hist-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function addClient() {
@@ -379,137 +440,7 @@ async function removeClient(id, name) {
   showAlert(`Client "${name}" deleted.`, 'success');
 }
 
-// ── Spray Schedule Tab ────────────────────────────
-
-async function loadReminders() {
-  try {
-    const r = await get('/api/admin/spray/reminders');
-    const od = document.getElementById('rem-overdue');
-    const td = document.getElementById('rem-today');
-    const wk = document.getElementById('rem-week');
-    if (od) od.textContent = r.overdue ?? 0;
-    if (td) td.textContent = r.today   ?? 0;
-    if (wk) wk.textContent = r.week    ?? 0;
-  } catch {}
-}
-
-function filterSpray(type, btn) {
-  currentSprayFilter = type;
-  document.querySelectorAll('#spray-filter-tabs .filter-tab').forEach(b => b.classList.remove('active'));
-  if (btn) {
-    btn.classList.add('active');
-  } else {
-    const tabMap = { all: 0, scheduled: 1, overdue: 2, completed: 3 };
-    const tabs = document.querySelectorAll('#spray-filter-tabs .filter-tab');
-    const idx = tabMap[type];
-    if (idx !== undefined && tabs[idx]) tabs[idx].classList.add('active');
-    else if (tabs[0]) tabs[0].classList.add('active');
-  }
-  loadSpraySchedule(type);
-}
-
-async function loadSpraySchedule(status) {
-  const el = document.getElementById('spray-schedule-list');
-  if (!el) return;
-  el.innerHTML = '<div class="table-empty">Loading…</div>';
-  try {
-    const params = new URLSearchParams();
-    if (status && status !== 'all') params.set('status', status);
-    const records = await get('/api/admin/spray/schedule?' + params);
-    if (!records.length) {
-      el.innerHTML = '<div class="table-empty">No jobs found</div>'; return;
-    }
-    el.innerHTML = records.map(r => {
-      const disp = sprayDisplayStatus(r);
-      const due = r.scheduled_date ? fmtDateShort(r.scheduled_date) : '—';
-      return `<div class="spray-job-row">
-        <div class="spray-job-main">
-          <div class="spray-job-client">${esc(r.client_name || '—')}</div>
-          <div class="spray-job-meta">
-            ${r.category ? `<span class="badge badge-gray">${esc(r.category)}</span>` : ''}
-            ${r.product ? `<span style="font-size:.78rem;color:var(--gray-500)">${esc(r.product)}</span>` : ''}
-          </div>
-          ${r.client_address ? `<div class="spray-job-addr">📍 ${esc(r.client_address)}</div>` : ''}
-          ${r.notes ? `<div class="spray-job-addr">📝 ${esc(r.notes)}</div>` : ''}
-        </div>
-        <div class="spray-job-right">
-          <span class="badge ${disp.cls}">${disp.label}</span>
-          <div class="spray-job-date">${due}</div>
-          ${r.worker_name ? `<div style="font-size:.75rem;color:var(--gray-500)">${esc(r.worker_name)}</div>` : ''}
-          ${r.status !== 'completed' ? `<button class="btn btn-primary btn-sm" style="margin-top:.35rem" onclick="markSprayComplete(${r.id})">✓ Done</button>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-  } catch (e) {
-    el.innerHTML = '<div class="table-empty">Error loading schedule</div>';
-  }
-}
-
-function sprayDisplayStatus(r) {
-  if (r.status === 'completed') return { label: 'Completed', cls: 'badge-completed' };
-  if (r.scheduled_date && new Date(r.scheduled_date + 'T12:00:00') < new Date())
-    return { label: 'Overdue', cls: 'badge-overdue' };
-  return { label: 'Scheduled', cls: 'badge-scheduled' };
-}
-
-async function markSprayComplete(id) {
-  await put(`/api/admin/spray/${id}/status`, { status: 'completed' });
-  loadSpraySchedule(currentSprayFilter);
-  loadReminders();
-  showAlert('Marked as complete.', 'success');
-}
-
-async function createSprayJob() {
-  const clientId   = document.getElementById('ns-client').value;
-  const clientOpt  = document.getElementById('ns-client').selectedOptions[0];
-  const clientName = clientOpt?.text || '';
-  const address    = document.getElementById('ns-address').value.trim();
-  const category   = document.getElementById('ns-category').value;
-  const product    = document.getElementById('ns-product').value.trim();
-  const date       = document.getElementById('ns-date').value;
-  const workerId   = document.getElementById('ns-worker').value;
-  const notes      = document.getElementById('ns-notes').value.trim();
-
-  if (!clientId && !clientName) { showAlert('Select a client.', 'error'); return; }
-
-  const client = clientsList.find(c => c.id == clientId);
-  const r = await post('/api/admin/spray/schedule', {
-    clientId:      clientId || null,
-    clientName:    client?.name || clientName,
-    clientPhone:   client?.phone || null,
-    clientAddress: address || client?.address || null,
-    category, product, scheduledDate: date || null,
-    workerId: workerId || null, notes,
-  });
-  if (r.success) {
-    closeModal('m-new-spray');
-    ['ns-address','ns-product','ns-notes','ns-date'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('ns-client').value = '';
-    document.getElementById('ns-category').value = '';
-    document.getElementById('ns-worker').value = '';
-    loadSpraySchedule(currentSprayFilter);
-    loadReminders();
-    showAlert('Spray job scheduled.', 'success');
-  }
-}
-
-function autoFillSprayAddress() {
-  const sel = document.getElementById('ns-client');
-  const opt = sel?.selectedOptions[0];
-  const addr = opt?.getAttribute('data-address') || '';
-  document.getElementById('ns-address').value = addr;
-}
-
-function renderAdminSeasonal() {
-  const month = new Date().getMonth();
-  const season = ADMIN_SEASONAL.find(s => s.months.includes(month));
-  const el = document.getElementById('admin-seasonal-prompt');
-  if (!season || !el) return;
-  el.innerHTML = `<h4>🗓 ${season.label} — This Month's Priorities</h4>
-    <p>${season.tips.join(' &nbsp;·&nbsp; ')}</p>`;
-}
-
-// ── Products (Settings Tab) ───────────────────────
+// ── Spraying: Products ────────────────────────────
 
 let productsList = [];
 
@@ -578,17 +509,14 @@ async function removeProduct(id, name) {
   showAlert(`Product "${name}" deleted.`, 'success');
 }
 
-// ── Workers Tab ───────────────────────────────────
+// ── Workers ───────────────────────────────────────
 
 async function loadWorkers() {
   const workers = await get('/api/admin/workers');
   const opts = workers.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
   document.getElementById('f-worker').innerHTML = '<option value="">All Workers</option>' + opts;
-
-  // Populate New Spray Job worker dropdown
-  const nsWorker = document.getElementById('ns-worker');
-  if (nsWorker) nsWorker.innerHTML = '<option value="">— Worker —</option>' + opts;
-
+  const spjW = document.getElementById('spj-worker');
+  if (spjW) spjW.innerHTML = '<option value="">All Workers</option>' + opts;
   const tbody = document.getElementById('workers-tbody');
   if (!workers.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No workers yet</td></tr>'; return; }
   tbody.innerHTML = workers.map(w => `
@@ -653,13 +581,14 @@ async function removeWorker(id, name) {
 
 async function toggleSprayAccess(id, name, currentValue) {
   const newValue = !currentValue;
-  if (!confirm(`${newValue ? 'Grant' : 'Revoke'} spray access for "${name}"?`)) return;
+  const action = newValue ? 'Grant' : 'Revoke';
+  if (!confirm(`${action} spray access for "${name}"?`)) return;
   await put(`/api/admin/workers/${id}/spray-access`, { spray_access: newValue });
   loadWorkers();
   showAlert(`Spray access ${newValue ? 'granted to' : 'revoked from'} "${name}".`, 'success');
 }
 
-// ── Locations (Settings Tab) ──────────────────────
+// ── Locations ─────────────────────────────────────
 
 async function loadLocations() {
   const locs = await get('/api/locations');
@@ -667,21 +596,22 @@ async function loadLocations() {
   const opts = locs.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   document.getElementById('f-location').innerHTML = '<option value="">All Locations</option>' + opts;
   const tbody = document.getElementById('locations-tbody');
-  if (!tbody) return;
-  if (!locs.length) { tbody.innerHTML = '<tr><td colspan="3" class="table-empty">No locations yet</td></tr>'; return; }
+  if (!locs.length) { tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No locations yet</td></tr>'; return; }
   tbody.innerHTML = locs.map(l => {
     const hasPolygon  = l.polygon && l.polygon.length >= 3;
     const hasGeofence = l.geofence_lat && l.geofence_lng;
     const geofenceBadge = hasPolygon
-      ? `<span class="badge badge-success">✓ Property lines</span>`
+      ? `<span class="badge badge-success">✓ Property lines set</span>`
       : hasGeofence
         ? `<span class="badge badge-success">✓ ${l.geofence_radius || 150}m radius</span>`
         : `<span class="text-muted">Not set</span>`;
     return `<tr>
-      <td><strong>${esc(l.name)}</strong>${l.address ? `<br><span class="text-muted" style="font-size:.75rem">${esc(l.address)}</span>` : ''}</td>
+      <td><strong>${esc(l.name)}</strong></td>
+      <td>${l.address ? esc(l.address) : '<span class="text-muted">—</span>'}</td>
       <td>${geofenceBadge}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-outline btn-sm" onclick="openMapModal(${l.id})">🗺 Draw</button>
+      <td>${fmtDate(l.created_at)}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openMapModal(${l.id})">🗺 Draw Property</button>
         <button class="btn btn-outline btn-sm" onclick="openGeofenceModal(${l.id},'${esc(l.name)}',${l.geofence_lat||'null'},${l.geofence_lng||'null'},${l.geofence_radius||150})">📍 Radius</button>
         <button class="btn btn-danger btn-sm" onclick="removeLocation(${l.id},'${esc(l.name)}')">Remove</button>
       </td>
@@ -860,8 +790,8 @@ function fmtDateTime(iso) { const d = new Date(iso); return d.toLocaleDateString
 function today() { return new Date().toISOString().split('T')[0]; }
 function pad(n) { return String(n).padStart(2,'0'); }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function show(id) { const el=document.getElementById(id); if(el) el.classList.remove('section-hidden'); }
-function hide(id) { const el=document.getElementById(id); if(el) el.classList.add('section-hidden'); }
+function show(id) { document.getElementById(id).classList.remove('section-hidden'); }
+function hide(id) { document.getElementById(id).classList.add('section-hidden'); }
 function showAlert(msg, type) {
   const el = document.getElementById('admin-alert');
   el.className = `alert alert-${type==='error'?'error':type==='warning'?'warning':'success'}`;
@@ -870,7 +800,7 @@ function showAlert(msg, type) {
 }
 function showModalErr(id, msg) {
   const el = document.getElementById(id);
-  if (el) { el.textContent = msg; show(id); }
+  el.textContent = msg; show(id);
 }
 function downloadCSV(rows, filename) {
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');

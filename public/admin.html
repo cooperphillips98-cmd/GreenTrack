@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Legacy Landscape Management – Admin</title>
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=10">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
 </head>
@@ -25,7 +25,9 @@
         <input id="admin-pw" type="password" class="form-control" placeholder="Enter password">
       </div>
       <button class="btn btn-primary btn-block btn-lg" onclick="adminLogin()">Sign In</button>
-      <div class="text-center mt-2"><a href="/" class="text-muted" style="font-size:.8rem">← Worker App</a></div>
+      <div class="text-center mt-2">
+        <a href="/" class="text-muted" style="font-size:.8rem">← Worker App</a>
+      </div>
     </div>
   </div>
 </div>
@@ -46,56 +48,37 @@
     <div id="admin-alert" class="section-hidden"></div>
 
     <div class="admin-nav">
-      <button class="nav-btn active" onclick="showTab(this,'dashboard')">Dashboard</button>
-      <button class="nav-btn"        onclick="showTab(this,'clients')">Clients</button>
-      <button class="nav-btn"        onclick="showTab(this,'jobs')">Jobs</button>
-      <button class="nav-btn"        onclick="showTab(this,'spray')">🌿 Spray Schedule</button>
-      <button class="nav-btn"        onclick="showTab(this,'workers')">Workers</button>
-      <button class="nav-btn"        onclick="showTab(this,'settings')">Settings</button>
+      <button class="nav-btn active" data-tab="dashboard"  onclick="showTab(this,'dashboard')">Dashboard</button>
+      <button class="nav-btn"        data-tab="entries"    onclick="showTab(this,'entries')">Time Entries</button>
+      <button class="nav-btn"        data-tab="spraying"   onclick="showTab(this,'spraying')">🌿 Spraying</button>
+      <button class="nav-btn"        data-tab="workers"    onclick="showTab(this,'workers')">Workers</button>
+      <button class="nav-btn"        data-tab="locations"  onclick="showTab(this,'locations')">Locations</button>
+      <button class="nav-btn"        data-tab="settings"   onclick="showTab(this,'settings')">Settings</button>
     </div>
 
-    <!-- ══ DASHBOARD ══ -->
+    <!-- ══ DASHBOARD ══════════════════════════════════════════ -->
     <div id="tab-dashboard">
-      <!-- Quick Actions -->
-      <div class="quick-actions">
-        <button class="quick-action" onclick="showTab(document.querySelector('.nav-btn:nth-child(2)'),'clients');setTimeout(()=>openModal('m-add-client'),100)">
-          <span class="qa-icon">👤</span><span class="qa-label">Add Client</span>
-        </button>
-        <button class="quick-action" onclick="showTab(document.querySelector('.nav-btn:nth-child(4)'),'spray');setTimeout(()=>openModal('m-new-spray'),100)">
-          <span class="qa-icon">🌿</span><span class="qa-label">New Spray Job</span>
-        </button>
-        <button class="quick-action" onclick="showTab(document.querySelector('.nav-btn:nth-child(3)'),'jobs')">
-          <span class="qa-icon">📋</span><span class="qa-label">View Jobs</span>
-        </button>
-        <button class="quick-action" onclick="showTab(document.querySelector('.nav-btn:nth-child(4)'),'spray');filterSpray('today')">
-          <span class="qa-icon">📅</span><span class="qa-label">Today's Route</span>
-        </button>
-      </div>
-
-      <!-- Stats -->
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-value" id="st-workers">–</div><div class="stat-label">Workers</div></div>
         <div class="stat-card"><div class="stat-value" id="st-active">–</div><div class="stat-label">Working Now</div></div>
         <div class="stat-card"><div class="stat-value" id="st-today">–</div><div class="stat-label">Today's Hours</div></div>
         <div class="stat-card"><div class="stat-value" id="st-week">–</div><div class="stat-label">This Week</div></div>
       </div>
-
-      <!-- Charts -->
       <div class="charts-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:.875rem;margin-bottom:.875rem">
         <div class="card" style="margin-bottom:0">
           <div class="card-title">Hours This Week by Day</div>
           <canvas id="chart-hours" style="max-height:180px"></canvas>
         </div>
         <div class="card" style="margin-bottom:0">
-          <div class="card-title">Jobs by Type</div>
+          <div class="card-title">Jobs by Type This Week</div>
           <canvas id="chart-types" style="max-height:180px"></canvas>
           <div id="chart-types-empty" class="table-empty section-hidden" style="padding:1rem">No jobs this week</div>
         </div>
       </div>
-
-      <!-- Weekly hours + currently working -->
       <div class="card">
-        <div class="sec-hdr"><div class="card-title mb-0">Weekly Hours by Worker</div></div>
+        <div class="sec-hdr">
+          <div class="card-title mb-0">Weekly Hours by Worker</div>
+        </div>
         <div id="overtime-list"><div class="table-empty">Loading…</div></div>
       </div>
       <div class="card">
@@ -107,37 +90,8 @@
       </div>
     </div>
 
-    <!-- ══ CLIENTS ══ -->
-    <div id="tab-clients" class="section-hidden">
-      <div class="sec-hdr">
-        <h2>Clients</h2>
-        <button class="btn btn-primary btn-sm" onclick="openModal('m-add-client')">+ Add Client</button>
-      </div>
-      <div id="client-search-bar" style="margin-bottom:.875rem">
-        <input type="text" class="form-control" placeholder="🔍 Search clients…" oninput="filterClientList(this.value)">
-      </div>
-      <div class="card mb-0" style="padding:0;overflow:hidden">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>Phone</th><th>Address</th><th>Last Service</th><th>Next Visit</th><th>Actions</th></tr></thead>
-            <tbody id="clients-tbody"><tr><td colspan="6" class="table-empty">Loading…</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <!-- Client history panel (inline) -->
-      <div id="client-hist-panel" class="section-hidden" style="margin-top:.875rem">
-        <div class="card mb-0">
-          <div class="sec-hdr">
-            <div class="card-title mb-0" id="hist-panel-title">Service History</div>
-            <button class="btn btn-outline btn-sm" onclick="hide('client-hist-panel')">Close</button>
-          </div>
-          <div id="hist-panel-body"><div class="table-empty">Loading…</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ══ JOBS ══ -->
-    <div id="tab-jobs" class="section-hidden">
+    <!-- ══ TIME ENTRIES ════════════════════════════════════════ -->
+    <div id="tab-entries" class="section-hidden">
       <div class="filter-bar">
         <div class="form-group">
           <label class="form-label">Worker</label>
@@ -161,52 +115,113 @@
       <div class="card mb-0" style="padding:0;overflow:hidden">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Worker</th><th>Location</th><th>Job Type</th><th>Clock In</th><th>Clock Out</th><th>Duration</th><th>Notes</th><th></th></tr></thead>
-            <tbody id="entries-tbody"><tr><td colspan="9" class="table-empty">Set filters and click Filter</td></tr></tbody>
+            <thead>
+              <tr><th>Date</th><th>Worker</th><th>Location</th><th>Clock In</th><th>Clock Out</th><th>Duration</th><th>GPS In</th><th>Notes</th><th></th></tr>
+            </thead>
+            <tbody id="entries-tbody">
+              <tr><td colspan="9" class="table-empty">Set filters and click Filter</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ══ SPRAY SCHEDULE ══ -->
-    <div id="tab-spray" class="section-hidden">
+    <!-- ══ SPRAYING ════════════════════════════════════════════ -->
+    <div id="tab-spraying" class="section-hidden">
 
-      <!-- Reminder strip -->
-      <div class="reminder-strip">
-        <div class="reminder-card" onclick="filterSpray('overdue')">
-          <div class="reminder-num red" id="rem-overdue">–</div>
-          <div class="reminder-label">Overdue</div>
-        </div>
-        <div class="reminder-card" onclick="filterSpray('today')">
-          <div class="reminder-num amber" id="rem-today">–</div>
-          <div class="reminder-label">Due Today</div>
-        </div>
-        <div class="reminder-card" onclick="filterSpray('week')">
-          <div class="reminder-num green-num" id="rem-week">–</div>
-          <div class="reminder-label">This Week</div>
+      <!-- Sub-nav -->
+      <div class="admin-nav" style="margin-bottom:1rem">
+        <button class="nav-btn active" onclick="showSpraySection(this,'spray-overview')">Overview</button>
+        <button class="nav-btn"        onclick="showSpraySection(this,'spray-jobs')">Jobs</button>
+        <button class="nav-btn"        onclick="showSpraySection(this,'spray-clients')">Clients</button>
+        <button class="nav-btn"        onclick="showSpraySection(this,'spray-products')">Products</button>
+      </div>
+
+      <!-- SPRAY: Overview -->
+      <div id="spray-overview">
+        <div style="display:grid;grid-template-columns:1fr 300px;gap:.875rem;align-items:start">
+          <div class="card" style="margin-bottom:0">
+            <div class="sec-hdr">
+              <div class="card-title mb-0">Upcoming Follow-Ups</div>
+              <button class="btn btn-outline btn-sm" onclick="exportUpcomingCSV()">Export CSV</button>
+            </div>
+            <div id="admin-upcoming-list"><div class="table-empty">Loading…</div></div>
+          </div>
+          <div class="seasonal-card" id="admin-seasonal-prompt" style="margin-bottom:0"></div>
         </div>
       </div>
 
-      <!-- Seasonal prompt -->
-      <div class="spray-seasonal" id="admin-seasonal-prompt"></div>
-
-      <!-- Header + filter -->
-      <div class="sec-hdr" style="margin-bottom:.65rem">
-        <div class="filter-tabs" id="spray-filter-tabs" style="margin-bottom:0">
-          <button class="filter-tab active" onclick="filterSpray('all',this)">All</button>
-          <button class="filter-tab" onclick="filterSpray('scheduled',this)">Scheduled</button>
-          <button class="filter-tab" onclick="filterSpray('overdue',this)">Overdue</button>
-          <button class="filter-tab" onclick="filterSpray('completed',this)">Completed</button>
+      <!-- SPRAY: Jobs -->
+      <div id="spray-jobs" class="section-hidden">
+        <div class="filter-bar">
+          <div class="form-group">
+            <label class="form-label">Worker</label>
+            <select id="spj-worker" class="form-control"><option value="">All Workers</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Client</label>
+            <select id="spj-client" class="form-control"><option value="">All Clients</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">From</label>
+            <input id="spj-start" type="date" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">To</label>
+            <input id="spj-end" type="date" class="form-control">
+          </div>
+          <button class="btn btn-primary" onclick="loadSprayJobs()">Filter</button>
+          <button class="btn btn-outline" onclick="exportSprayCSV()">Export CSV</button>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('m-new-spray')" style="white-space:nowrap">+ New Job</button>
+        <div class="card mb-0" style="padding:0;overflow:hidden">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Worker</th><th>Client</th><th>Location</th><th>Service</th><th>Product</th><th>Duration</th><th>Notes</th><th>Next Visit</th></tr>
+              </thead>
+              <tbody id="spray-jobs-tbody">
+                <tr><td colspan="9" class="table-empty">Set filters and click Filter</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div class="card mb-0" style="padding:.5rem 1rem">
-        <div id="spray-schedule-list"><div class="table-empty">Loading…</div></div>
+      <!-- SPRAY: Clients -->
+      <div id="spray-clients" class="section-hidden">
+        <div class="sec-hdr">
+          <h2>Clients</h2>
+          <button class="btn btn-primary btn-sm" onclick="openModal('m-add-client')">+ Add Client</button>
+        </div>
+        <div class="card mb-0" style="padding:0;overflow:hidden">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Phone</th><th>Address</th><th>Last Service</th><th>Next Visit</th><th>Actions</th></tr></thead>
+              <tbody id="clients-tbody"><tr><td colspan="6" class="table-empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- ══ WORKERS ══ -->
+      <!-- SPRAY: Products -->
+      <div id="spray-products" class="section-hidden">
+        <div class="sec-hdr">
+          <h2>Products</h2>
+          <button class="btn btn-primary btn-sm" onclick="openModal('m-add-product')">+ Add Product</button>
+        </div>
+        <div class="card mb-0" style="padding:0;overflow:hidden">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Product</th><th>Type</th><th>Reapply Window</th><th>Notes</th><th>Actions</th></tr></thead>
+              <tbody id="products-tbody"><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /tab-spraying -->
+
+    <!-- ══ WORKERS ═════════════════════════════════════════════ -->
     <div id="tab-workers" class="section-hidden">
       <div class="sec-hdr">
         <h2>Workers</h2>
@@ -238,41 +253,35 @@
       </div>
     </div>
 
-    <!-- ══ SETTINGS ══ -->
-    <div id="tab-settings" class="section-hidden">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.875rem;align-items:start">
-        <div class="card">
-          <div class="card-title">Change Admin Password</div>
-          <div class="form-group"><label class="form-label">New Password</label><input id="new-pw" type="password" class="form-control" placeholder="New password"></div>
-          <div class="form-group"><label class="form-label">Confirm Password</label><input id="confirm-pw" type="password" class="form-control" placeholder="Confirm"></div>
-          <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
-        </div>
-        <!-- Locations in settings -->
-        <div class="card">
-          <div class="sec-hdr">
-            <div class="card-title mb-0">Job Sites / Locations</div>
-            <button class="btn btn-primary btn-sm" onclick="openModal('m-add-location')">+ Add</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Name</th><th>Geofence</th><th>Actions</th></tr></thead>
-              <tbody id="locations-tbody"><tr><td colspan="3" class="table-empty">Loading…</td></tr></tbody>
-            </table>
-          </div>
-        </div>
+    <!-- ══ LOCATIONS ═══════════════════════════════════════════ -->
+    <div id="tab-locations" class="section-hidden">
+      <div class="sec-hdr">
+        <h2>Locations / Job Sites</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('m-add-location')">+ Add Location</button>
       </div>
-      <!-- Products -->
-      <div class="card" style="margin-top:.875rem">
-        <div class="sec-hdr">
-          <div class="card-title mb-0">Spray Products</div>
-          <button class="btn btn-primary btn-sm" onclick="openModal('m-add-product')">+ Add</button>
-        </div>
+      <div class="card mb-0" style="padding:0;overflow:hidden">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Product</th><th>Type</th><th>Reapply Window</th><th>Notes</th><th>Actions</th></tr></thead>
-            <tbody id="products-tbody"><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
+            <thead><tr><th>Name</th><th>Address</th><th>Geofence</th><th>Added</th><th>Actions</th></tr></thead>
+            <tbody id="locations-tbody"><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ════════════════════════════════════════════ -->
+    <div id="tab-settings" class="section-hidden">
+      <div class="card" style="max-width:400px">
+        <div class="card-title">Change Admin Password</div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input id="new-pw" type="password" class="form-control" placeholder="New password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input id="confirm-pw" type="password" class="form-control" placeholder="Confirm">
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
       </div>
     </div>
   </div>
@@ -298,7 +307,7 @@
     <div class="modal-title">Edit Worker</div>
     <input type="hidden" id="ew-id">
     <div class="form-group"><label class="form-label">Name</label><input id="ew-name" type="text" class="form-control"></div>
-    <div class="form-group"><label class="form-label">New PIN <span class="text-muted">(leave blank to keep)</span></label><input id="ew-pin" type="text" class="form-control pin-input" placeholder="New PIN" maxlength="10" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">New PIN <span class="text-muted">(leave blank to keep current)</span></label><input id="ew-pin" type="text" class="form-control pin-input" placeholder="New PIN" maxlength="10" inputmode="numeric"></div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal('m-edit-worker')">Cancel</button>
       <button class="btn btn-primary" onclick="saveWorker()">Save</button>
@@ -337,53 +346,6 @@
   </div>
 </div>
 
-<!-- MODAL: New Spray Job -->
-<div id="m-new-spray" class="modal-overlay">
-  <div class="modal" style="max-width:480px">
-    <div class="modal-title">New Spray Job</div>
-    <div class="form-group">
-      <label class="form-label">Client <span style="color:var(--red)">*</span></label>
-      <select id="ns-client" class="form-control" onchange="autoFillSprayAddress()">
-        <option value="">— Select client —</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Address</label>
-      <input id="ns-address" type="text" class="form-control" placeholder="Auto-filled from client">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Treatment Type</label>
-      <select id="ns-category" class="form-control">
-        <option value="">— Select type —</option>
-        <option>Pre-emergent</option><option>Weed Control</option><option>Fertilizer</option>
-        <option>Fungicide</option><option>Pest Control</option><option>Other</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Product / Chemical</label>
-      <input id="ns-product" type="text" class="form-control" placeholder="e.g. Prodiamine 65 WDG">
-    </div>
-    <div style="display:flex;gap:.75rem">
-      <div class="form-group" style="flex:1">
-        <label class="form-label">Date Scheduled</label>
-        <input id="ns-date" type="date" class="form-control">
-      </div>
-      <div class="form-group" style="flex:1">
-        <label class="form-label">Assigned To</label>
-        <select id="ns-worker" class="form-control"><option value="">— Worker —</option></select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <input id="ns-notes" type="text" class="form-control" placeholder="Application notes…">
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeModal('m-new-spray')">Cancel</button>
-      <button class="btn btn-primary" onclick="createSprayJob()">Save Job</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL: Add Product -->
 <div id="m-add-product" class="modal-overlay">
   <div class="modal">
@@ -401,7 +363,7 @@
       <div class="form-group" style="flex:1"><label class="form-label">Min Reapply (days)</label><input id="np-rmin" type="number" class="form-control" placeholder="e.g. 28"></div>
       <div class="form-group" style="flex:1"><label class="form-label">Max Reapply (days)</label><input id="np-rmax" type="number" class="form-control" placeholder="e.g. 42"></div>
     </div>
-    <div class="form-group"><label class="form-label">Notes</label><input id="np-notes" type="text" class="form-control" placeholder="Application tips…"></div>
+    <div class="form-group"><label class="form-label">Notes</label><input id="np-notes" type="text" class="form-control" placeholder="Application tips..."></div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal('m-add-product')">Cancel</button>
       <button class="btn btn-primary" onclick="addProduct()">Add Product</button>
@@ -440,7 +402,7 @@
   <div class="modal">
     <div class="modal-title">Set Geofence – <span id="gf-loc-name"></span></div>
     <input type="hidden" id="gf-loc-id">
-    <p style="font-size:.825rem;color:var(--gray-600);margin-bottom:1rem">Workers must be within the radius to clock in.</p>
+    <p style="font-size:.825rem;color:var(--gray-600);margin-bottom:1rem">Workers must be within the radius of this point to clock in.</p>
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem">
       <button class="btn btn-outline btn-sm" onclick="useMyLocationForGeofence()">📍 Use My Location</button>
       <span id="gf-location-status" style="font-size:.8rem;color:var(--gray-500)"></span>
@@ -454,7 +416,7 @@
       <input id="gf-radius" type="number" class="form-control" value="150" min="25" max="1000">
     </div>
     <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" id="gf-clear-btn" onclick="clearGeofence()" style="margin-right:auto">Remove</button>
+      <button class="btn btn-danger btn-sm" id="gf-clear-btn" onclick="clearGeofence()" style="margin-right:auto">Remove Geofence</button>
       <button class="btn btn-outline" onclick="closeModal('m-set-geofence')">Cancel</button>
       <button class="btn btn-primary" onclick="saveGeofence()">Save</button>
     </div>
@@ -492,17 +454,11 @@
       </div>
     </div>
     <div style="font-size:.75rem;color:var(--gray-500);padding:.4rem 1rem;background:var(--gray-50);flex-shrink:0">
-      Draw tool (top of map) → click each corner → double-click to finish
+      Draw tool (top of map) → click each corner of the property → double-click to finish
     </div>
     <div id="property-map" style="flex:1;width:100%;min-height:0"></div>
     <input type="hidden" id="map-loc-id">
   </div>
-</div>
-
-<!-- Photo Modal -->
-<div id="photo-modal" class="photo-modal section-hidden" onclick="closePModal()">
-  <img id="photo-modal-img" src="" alt="Job Photo">
-  <div style="color:#fff;font-size:.8rem;margin-top:.5rem;opacity:.7">Tap to close</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

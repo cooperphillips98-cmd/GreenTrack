@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=10">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#1b4332">
@@ -56,155 +56,217 @@
     </div>
   </header>
 
-  <!-- Slim status bar -->
-  <div id="status-bar" class="status-bar">
-    <span id="sb-text">Not clocked in</span>
-    <span id="sb-timer-wrap" class="section-hidden"><span class="sb-timer-pill" id="sb-timer">0:00</span></span>
-  </div>
-
   <div id="app-alert" class="section-hidden" style="margin:.75rem 1rem 0"></div>
 
-  <!-- TAB: Home -->
-  <div id="tab-home" class="tab-pane container" style="padding-top:.875rem">
+  <!-- TAB: Clock / Start Job -->
+  <div id="tab-clock" class="tab-pane container" style="padding-top:1rem">
 
-    <!-- Active job card (shown when clocked in) -->
-    <div id="active-section" class="section-hidden">
-      <div class="active-card">
-        <div class="active-card-type" id="ac-type">Mowing</div>
-        <div class="active-card-client" id="ac-client">Client Name</div>
-        <div class="active-card-detail" id="ac-detail">📍 Location</div>
-        <div class="active-card-timer" id="ac-timer">0:00:00</div>
-        <div class="form-group" style="margin-bottom:.6rem">
-          <input id="out-notes" type="text" class="form-control" placeholder="Job notes (optional)">
+    <!-- Status: clocked out -->
+    <div id="s-out" class="clock-status out">
+      <span class="clock-icon">⏸</span>
+      <div class="clock-label">Ready to Start</div>
+      <div class="clock-sub">Fill in job details below</div>
+    </div>
+
+    <!-- Status: clocked in / active job -->
+    <div id="s-in" class="clock-status in section-hidden">
+      <span class="clock-icon">▶</span>
+      <div id="s-client" class="clock-label">Working</div>
+      <div id="s-service" class="clock-sub" style="font-weight:600;margin-bottom:.1rem"></div>
+      <div id="s-loc" class="clock-sub"></div>
+      <div id="s-timer" class="clock-timer">0:00:00</div>
+      <div id="s-since" class="clock-sub"></div>
+    </div>
+
+    <!-- Start Job form -->
+    <div id="form-in" class="card">
+      <div class="card-title">Start Job</div>
+
+      <div class="form-group">
+        <label class="form-label">Job Site / Location <span style="color:var(--red)">*</span></label>
+        <select id="loc-select" class="form-control">
+          <option value="">— Choose a location —</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Job Type <span style="color:var(--red)">*</span></label>
+        <select id="job-type" class="form-control" onchange="handleJobTypeSelect()">
+          <option value="">— What are you doing today? —</option>
+          <option>Mowing</option>
+          <option>Trimming / Edging</option>
+          <option>General Landscaping</option>
+          <option>Cleanup / Leaf Removal</option>
+          <option>Irrigation</option>
+          <option>Spray / Treatment</option>
+          <option>Other</option>
+        </select>
+      </div>
+
+      <!-- Spray-specific details — only visible when "Spray / Treatment" is selected -->
+      <div id="spray-job-fields" class="section-hidden">
+        <div class="job-details-divider">
+          <span>Treatment Details <span class="text-muted" style="font-weight:400;font-size:.75rem">(optional)</span></span>
         </div>
-        <div class="form-group" style="margin-bottom:.6rem">
-          <label class="form-label" style="color:rgba(255,255,255,.6)">Next Visit</label>
-          <input id="job-next-date" type="date" class="form-control">
-          <div id="next-date-hint" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.2rem"></div>
+
+        <div class="form-group">
+          <label class="form-label">Client</label>
+          <select id="job-client" class="form-control" onchange="handleClientSelect()">
+            <option value="">— Select or skip —</option>
+            <option value="__new__">+ New client…</option>
+          </select>
         </div>
+        <div id="new-client-wrap" class="section-hidden" style="margin-top:-.4rem;margin-bottom:.875rem">
+          <input id="job-client-name" type="text" class="form-control" placeholder="Client full name" style="margin-bottom:.4rem">
+          <input id="job-client-phone" type="tel" class="form-control" placeholder="Phone (optional)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Service Type</label>
+          <select id="job-service" class="form-control" onchange="suggestProduct()">
+            <option value="">— Select service —</option>
+            <option>Weed Control</option>
+            <option>Fertilizer</option>
+            <option>Pest Control</option>
+            <option>Pre-emergent</option>
+            <option>Fungicide</option>
+            <option>Custom</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Product</label>
+          <select id="job-product" class="form-control">
+            <option value="">— Select product (optional) —</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Start Job</button>
+    </div>
+
+    <!-- End Job form -->
+    <div id="form-out" class="card section-hidden">
+      <div class="card-title">End Job</div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <input id="out-notes" type="text" class="form-control" placeholder="e.g. Treated front and back lawn">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Next Visit</label>
+        <input id="job-next-date" type="date" class="form-control">
+        <div id="next-date-hint" style="font-size:.75rem;color:var(--gray-500);margin-top:.2rem"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Job Photo <span class="text-muted" style="font-weight:400">(optional)</span></label>
         <div id="photo-preview-wrap" class="section-hidden" style="margin-bottom:.5rem">
-          <img id="photo-preview" src="" alt="" style="width:100%;border-radius:var(--r-sm);max-height:160px;object-fit:cover">
-          <button class="btn btn-sm btn-block" style="margin-top:.35rem;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="clearPhoto()">✕ Remove Photo</button>
+          <img id="photo-preview" src="" alt="" style="width:100%;border-radius:var(--r-sm);max-height:200px;object-fit:cover">
+          <button class="btn btn-outline btn-sm" style="margin-top:.4rem;width:100%" onclick="clearPhoto()">✕ Remove Photo</button>
         </div>
-        <label class="btn btn-sm btn-block" style="cursor:pointer;background:rgba(255,255,255,.12);color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.2);margin-bottom:.5rem">
-          📷 Add Photo
+        <label class="btn btn-outline btn-block" style="cursor:pointer">
+          📷 Take / Choose Photo
           <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this)">
         </label>
-        <button class="btn-huge btn-huge-red" onclick="clockOut()">⏹ Finish Job</button>
       </div>
-    </div>
-
-    <!-- Start job UI (shown when idle) -->
-    <div id="start-section">
-
-      <!-- Start Last Job Again -->
-      <div id="last-job-wrap" class="section-hidden">
-        <button class="btn-last-job" onclick="startLastJob()">
-          <div>
-            <span class="btn-last-job-label">▶ Start Last Job Again</span>
-            <span class="btn-last-job-detail" id="last-job-detail">—</span>
-          </div>
-          <span style="font-size:1.4rem;opacity:.5">→</span>
-        </button>
-      </div>
-
-      <!-- Client selection -->
-      <div class="field-label">Client</div>
-      <div id="client-buttons" class="client-grid"></div>
-      <button class="btn-add-new" onclick="showNewClientForm()">+ New Client</button>
-
-      <!-- Inline new client form -->
-      <div id="new-client-form" class="section-hidden" style="background:#fff;border-radius:var(--r);padding:1rem;margin-top:.5rem;box-shadow:var(--shadow-sm)">
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.65rem">New Client</div>
-        <input id="nc-name-inline" type="text" class="form-control" placeholder="Client name *" style="margin-bottom:.45rem">
-        <input id="nc-phone-inline" type="tel" class="form-control" placeholder="Phone (optional)" style="margin-bottom:.45rem">
-        <input id="nc-addr-inline" type="text" class="form-control" placeholder="Address (optional)" style="margin-bottom:.75rem">
-        <div style="display:flex;gap:.5rem">
-          <button class="btn btn-outline btn-sm" onclick="hideNewClientForm()">Cancel</button>
-          <button class="btn btn-primary btn-sm" onclick="saveNewClientInline()">Save Client</button>
-        </div>
-      </div>
-
-      <!-- Job type buttons -->
-      <div class="field-label">Job Type</div>
-      <div class="job-type-grid">
-        <button class="job-type-btn" data-type="Mowing" onclick="selectJobType(this)"><span class="jt-icon">🌿</span>Mowing</button>
-        <button class="job-type-btn" data-type="Trimming / Edging" onclick="selectJobType(this)"><span class="jt-icon">✂️</span>Trimming</button>
-        <button class="job-type-btn" data-type="General Landscaping" onclick="selectJobType(this)"><span class="jt-icon">🏡</span>Landscaping</button>
-        <button class="job-type-btn" data-type="Weed Control" onclick="selectJobType(this)"><span class="jt-icon">🌱</span>Weed Control</button>
-        <button class="job-type-btn" data-type="Spray / Treatment" onclick="selectJobType(this)"><span class="jt-icon">💧</span>Spray</button>
-        <button class="job-type-btn" data-type="Other" onclick="selectJobType(this)"><span class="jt-icon">⋯</span>Other</button>
-      </div>
-
-      <!-- Location -->
-      <div class="field-label">Job Site</div>
-      <select id="loc-select" class="form-control" style="font-size:1rem;padding:.8rem .9rem">
-        <option value="">— Choose location —</option>
-      </select>
-
-      <!-- Hidden spray fields (still needed for clock-out spray record) -->
-      <input type="hidden" id="job-client" value="">
-      <input type="hidden" id="job-client-name" value="">
-      <input type="hidden" id="job-client-phone" value="">
-      <input type="hidden" id="job-service" value="">
-      <input type="hidden" id="job-product" value="">
-      <input type="hidden" id="job-type" value="">
-
-      <button class="btn-huge btn-huge-green" onclick="clockIn()">▶ Start Job</button>
-
-    </div>
-  </div>
-
-  <!-- TAB: Clients -->
-  <div id="tab-clients" class="tab-pane section-hidden container" style="padding-top:.875rem">
-    <div class="sec-hdr" style="margin-bottom:.75rem">
-      <div style="font-weight:800;font-size:1rem">Clients</div>
-      <button class="btn btn-primary btn-sm" onclick="showWorkerTab('home');setTimeout(showNewClientForm,100)">+ Add</button>
-    </div>
-    <div class="card" style="padding:.5rem 1rem">
-      <div id="clients-tab-list"><div class="table-empty">Loading…</div></div>
-    </div>
-  </div>
-
-  <!-- TAB: Jobs -->
-  <div id="tab-jobs" class="tab-pane section-hidden container" style="padding-top:.875rem">
-    <div class="sec-hdr" style="margin-bottom:.75rem">
-      <div style="font-weight:800;font-size:1rem">Recent Jobs</div>
-      <button class="btn btn-outline btn-sm" onclick="loadJobs(true)">Load All</button>
-    </div>
-    <div class="card" style="padding:.5rem 1rem">
-      <div id="jobs-list"><div class="table-empty">No jobs yet</div></div>
+      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ End Job</button>
     </div>
   </div>
 
   <!-- TAB: Hours -->
-  <div id="tab-hours" class="tab-pane section-hidden container" style="padding-top:.875rem">
+  <div id="tab-hours" class="tab-pane section-hidden container" style="padding-top:1rem">
     <div class="week-stat">
       <div class="week-stat-value" id="week-hours">—</div>
       <div class="week-stat-label">This Week's Total Hours</div>
     </div>
     <div class="card">
       <div class="sec-hdr">
-        <div class="card-title mb-0">Breakdown</div>
+        <div class="card-title mb-0">This Week Breakdown</div>
         <button class="btn btn-outline btn-sm" onclick="exportHoursCSV()">Export CSV</button>
       </div>
       <div id="week-breakdown"><div class="table-empty">Loading…</div></div>
     </div>
   </div>
 
+  <!-- TAB: Jobs (history) -->
+  <div id="tab-jobs" class="tab-pane section-hidden container" style="padding-top:1rem">
+    <div id="upcoming-section" class="section-hidden">
+      <div class="card" style="border-left:4px solid var(--green)">
+        <div class="card-title">Upcoming Services</div>
+        <div id="upcoming-list"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec-hdr">
+        <div class="card-title mb-0">Recent Jobs</div>
+        <button class="btn btn-outline btn-sm" onclick="loadJobs(true)">Load All</button>
+      </div>
+      <div id="jobs-list"><div class="table-empty">No jobs yet</div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Spray Log (standalone) -->
+  <div id="tab-spray" class="tab-pane section-hidden container" style="padding-top:1rem">
+    <div id="seasonal-prompt" class="seasonal-card"></div>
+    <div class="card">
+      <div class="card-title">Log Application</div>
+      <div class="form-group">
+        <label class="form-label">Job Site / Client</label>
+        <select id="sp-loc" class="form-control">
+          <option value="">— Select location —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select id="sp-cat" class="form-control" onchange="updateProductList()">
+          <option value="">— Select category —</option>
+          <option>Pre-emergent</option>
+          <option>Weed Control</option>
+          <option>Fertilizer</option>
+          <option>Fungicide</option>
+          <option>Pest Control</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Product</label>
+        <select id="sp-prod" class="form-control">
+          <option value="">— Select category first —</option>
+        </select>
+        <input id="sp-prod-custom" type="text" class="form-control section-hidden" placeholder="Enter product name" style="margin-top:.4rem">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date &amp; Time Applied</label>
+        <input id="sp-date" type="datetime-local" class="form-control">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input id="sp-notes" type="text" class="form-control" placeholder="e.g. Front lawn only, 2 bags">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" onclick="logSpray()">Log Application</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent Applications</div>
+      <div id="spray-list"><div class="table-empty">Loading…</div></div>
+    </div>
+  </div>
+
   <!-- Bottom Navigation -->
   <nav class="bottom-nav">
-    <button class="bottom-nav-btn active" id="nav-home" onclick="showWorkerTab('home')">
-      <span class="bottom-nav-icon">🏠</span>Home
-    </button>
-    <button class="bottom-nav-btn" id="nav-clients" onclick="showWorkerTab('clients')">
-      <span class="bottom-nav-icon">👥</span>Clients
-    </button>
-    <button class="bottom-nav-btn" id="nav-jobs" onclick="showWorkerTab('jobs')">
-      <span class="bottom-nav-icon">📋</span>Jobs
+    <button class="bottom-nav-btn active" id="nav-clock" onclick="showWorkerTab('clock')">
+      <span class="bottom-nav-icon">⏱</span>
+      Clock
     </button>
     <button class="bottom-nav-btn" id="nav-hours" onclick="showWorkerTab('hours')">
-      <span class="bottom-nav-icon">📊</span>Hours
+      <span class="bottom-nav-icon">📊</span>
+      Hours
+    </button>
+    <button class="bottom-nav-btn" id="nav-jobs" onclick="showWorkerTab('jobs')">
+      <span class="bottom-nav-icon">🗂</span>
+      Jobs
+    </button>
+    <button class="bottom-nav-btn" id="nav-spray" onclick="showWorkerTab('spray')">
+      <span class="bottom-nav-icon">🌿</span>
+      Spray
     </button>
   </nav>
 </div>
