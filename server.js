@@ -48,7 +48,7 @@ app.post('/api/admin/auth', async (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  res.json({ mapboxToken: process.env.MAPBOX_TOKEN || '' });
+  res.json({ googleMapsKey: process.env.GOOGLE_MAPS_KEY || '' });
 });
 
 app.get('/api/locations', async (req, res) => res.json(await db.getLocations()));
