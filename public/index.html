@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-  <title>GreenTrack – Clock In/Out</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <title>Legacy Landscape Management</title>
+  <link rel="stylesheet" href="style.css?v=5">
   <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#2d6a4f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,9 +18,8 @@
   <div class="login-wrap">
     <div class="login-card">
       <div class="login-logo">
-        <span class="logo-icon">🌿</span>
-        <h1>GreenTrack</h1>
-        <p>Landscaping Time Tracker</p>
+        <img src="/logo.png" alt="Legacy Landscape Management" style="max-width:220px;margin-bottom:.5rem;display:block;margin-left:auto;margin-right:auto">
+        <p style="margin-top:.25rem">Employee Time Tracker</p>
       </div>
       <div id="login-error" class="alert alert-error section-hidden"></div>
       <div class="form-group">
@@ -48,7 +47,9 @@
 <!-- APP -->
 <div id="app-section" class="section-hidden">
   <header class="header">
-    <div class="header-logo">🌿 GreenTrack</div>
+    <div class="header-logo">
+      <span class="header-logo-pill"><img src="/logo.png" alt="Legacy Landscape" style="height:30px;display:block"></span>
+    </div>
     <div class="header-user">
       <strong id="hdr-name"></strong>
       <button class="btn btn-ghost" onclick="signOut()">Sign Out</button>

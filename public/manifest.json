@@ -1,7 +1,7 @@
 {
-  "name": "GreenTrack",
-  "short_name": "GreenTrack",
-  "description": "Landscaping time tracker",
+  "name": "Legacy Landscape Management",
+  "short_name": "Legacy",
+  "description": "Legacy Landscape Management Employee Time Tracker",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1b4332",

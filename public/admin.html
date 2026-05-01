@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>GreenTrack – Admin</title>
+  <title>Legacy Landscape Management – Admin</title>
   <link rel="stylesheet" href="style.css?v=5">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
@@ -15,9 +15,9 @@
   <div class="login-wrap">
     <div class="login-card">
       <div class="login-logo">
-        <span class="logo-icon">🛡️</span>
+        <img src="/logo.png" alt="Legacy Landscape Management" style="max-width:200px;margin-bottom:.5rem;display:block;margin-left:auto;margin-right:auto">
         <h1>Admin Panel</h1>
-        <p>GreenTrack Management</p>
+        <p>Legacy Landscape Management LLC</p>
       </div>
       <div id="admin-login-err" class="alert alert-error section-hidden"></div>
       <div class="form-group">
@@ -35,7 +35,9 @@
 <!-- ADMIN APP -->
 <div id="admin-app" class="section-hidden">
   <header class="header">
-    <div class="header-logo">🌿 GreenTrack Admin</div>
+    <div class="header-logo">
+      <span class="header-logo-pill"><img src="/logo.png" alt="Legacy Landscape" style="height:30px;display:block"></span>
+    </div>
     <div class="header-user">
       <a href="/" class="btn btn-ghost">Worker App</a>
       <button class="btn btn-ghost" onclick="adminSignOut()">Sign Out</button>
