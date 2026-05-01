@@ -3,34 +3,35 @@ let currentEntry = null;
 let timerInterval = null;
 let deferredPrompt = null;
 let photoData = null;
-let allEntries = [];
+let weekEntries = [];
+let sprayProducts = [];
 
-const SPRAY_PRODUCTS = {
-  'Pre-emergent': ['Prodiamine 65 WDG', 'Barricade 4FL', 'Dimension 0.15G', 'Pendimethalin', 'Other'],
-  'Post-emergent Herbicide': ['Celsius WG', 'Trimec / 3-Way', 'Certainty', 'Drive XLR8', 'Roundup (spot treat)', 'Other'],
-  'Fertilizer': ['16-4-8 Slow Release', '24-0-11 Summer Blend', '12-12-12 Balanced', '0-0-7 Potassium', 'Milorganite', 'Winterizer', 'Other'],
-  'Fungicide': ['Heritage G', 'Headway G', 'Pillar G', 'Clearys 3336 F', 'Triton Flo', 'Other'],
-  'Insecticide / Grub Control': ['Dylox 6.2G', 'Talstar P', 'Meridian 25WG', 'Sevin SL', 'Safari 20SG', 'Other'],
-  'Dormant / Horticultural Oil': ['Horticultural Oil', 'Neem Oil', 'Other'],
-  'Other': ['Custom / Other'],
+// Service type → reapply suggestion (days)
+const REAPPLY_DAYS = {
+  'Weed Control':    21,
+  'Fertilizer':      35,
+  'Pest Control':    60,
+  'Pre-emergent':    90,
+  'Fungicide':       21,
+  'Custom':          28,
 };
 
 const SEASONAL = [
-  { months: [0],     label: 'January',           tips: ['Apply dormant oil to trees & shrubs', 'Plan spring pre-emergent timing', 'Equipment maintenance'] },
-  { months: [1],     label: 'February',           tips: ['Pre-emergent if soil temp approaching 50°F', 'Prepare products for spring'] },
-  { months: [2],     label: 'March',              tips: ['PRE-EMERGENT — crabgrass prevention', 'Round 1 fertilizer if soil >55°F', 'Broadleaf spot treatment'] },
-  { months: [3],     label: 'April',              tips: ['Round 1 fertilizer (slow-release nitrogen)', 'Post-emergent broadleaf weed control', 'Fire ant bait application'] },
-  { months: [4],     label: 'May',                tips: ['Post-emergent weed control', 'Light Round 2 fertilizer', 'Begin grub monitoring'] },
-  { months: [5],     label: 'June',               tips: ['Grub control application', 'Fungicide if brown patch appears', 'Spot weed treatment'] },
-  { months: [6],     label: 'July',               tips: ['Grub control if missed June', 'Monitor for chinch bugs', 'Minimal fertilizer — heat stress risk'] },
-  { months: [7],     label: 'August',             tips: ['Round 2–3 fertilizer (late summer)', 'Fungicide for brown patch', 'Broadleaf spot treatment'] },
-  { months: [8],     label: 'September',          tips: ['PRE-EMERGENT — winter weeds (poa annua)', 'Round 3 fertilizer', 'Aeration & overseeding'] },
-  { months: [9],     label: 'October',            tips: ['Broadleaf weed control', 'Round 4 fertilizer', 'Second pre-emergent application'] },
-  { months: [10],    label: 'November',           tips: ['WINTERIZER fertilizer (last application)', 'Final pre-emergent if needed', 'Equipment winterization'] },
-  { months: [11],    label: 'December',           tips: ['Dormant oil spray', 'Review spray records for the year', 'Order spring products'] },
+  { months: [0],  label: 'January',   tips: ['Dormant oil on trees & shrubs', 'Plan spring pre-emergent', 'Equipment maintenance'] },
+  { months: [1],  label: 'February',  tips: ['Pre-emergent if soil approaching 50°F', 'Prepare spring products'] },
+  { months: [2],  label: 'March',     tips: ['PRE-EMERGENT — crabgrass prevention', 'Round 1 fertilizer if soil >55°F', 'Broadleaf spot treatment'] },
+  { months: [3],  label: 'April',     tips: ['Round 1 fertilizer (slow-release N)', 'Post-emergent broadleaf control', 'Fire ant bait'] },
+  { months: [4],  label: 'May',       tips: ['Post-emergent weed control', 'Light Round 2 fertilizer', 'Begin grub monitoring'] },
+  { months: [5],  label: 'June',      tips: ['Grub control application', 'Fungicide if brown patch appears', 'Spot weed treatment'] },
+  { months: [6],  label: 'July',      tips: ['Grub control if missed June', 'Monitor for chinch bugs', 'Minimal fertilizer — heat stress risk'] },
+  { months: [7],  label: 'August',    tips: ['Round 2–3 fertilizer', 'Fungicide for brown patch', 'Broadleaf spot treatment'] },
+  { months: [8],  label: 'September', tips: ['PRE-EMERGENT — winter weeds', 'Round 3 fertilizer', 'Aeration & overseeding'] },
+  { months: [9],  label: 'October',   tips: ['Broadleaf weed control', 'Round 4 fertilizer', 'Second pre-emergent'] },
+  { months: [10], label: 'November',  tips: ['WINTERIZER fertilizer', 'Final pre-emergent if needed', 'Equipment winterization'] },
+  { months: [11], label: 'December',  tips: ['Dormant oil spray', 'Review spray records', 'Order spring products'] },
 ];
 
-// PWA install prompt
+// PWA
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
@@ -61,11 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('inp-pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
   document.getElementById('inp-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inp-pin').focus(); });
   if (isIOS() && !isInStandaloneMode()) show('ios-banner');
-  // Set spray datetime to now
+  // default spray datetime to now
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  const el = document.getElementById('sp-date');
-  if (el) el.value = now.toISOString().slice(0, 16);
+  const spDate = document.getElementById('sp-date');
+  if (spDate) spDate.value = now.toISOString().slice(0, 16);
 });
 
 async function login() {
@@ -86,6 +87,7 @@ async function login() {
 
 function signOut() {
   localStorage.removeItem('gt_worker');
+  localStorage.removeItem('gt_pending_job');
   worker = null; currentEntry = null;
   clearInterval(timerInterval);
   show('login-section'); hide('app-section');
@@ -96,21 +98,23 @@ function signOut() {
 async function showApp() {
   hide('login-section'); show('app-section');
   document.getElementById('hdr-name').textContent = worker.name;
-  await loadLocations();
+  await Promise.all([loadLocations(), loadClients(), loadProductsForJobForm()]);
   await refreshStatus();
   showWorkerTab('clock');
   setupPushNotifications();
 }
 
 function showWorkerTab(tab) {
-  ['clock', 'hours', 'history', 'spray'].forEach(t => {
+  ['clock', 'hours', 'jobs', 'spray'].forEach(t => {
     document.getElementById('tab-' + t).classList.toggle('section-hidden', t !== tab);
     document.getElementById('nav-' + t).classList.toggle('active', t === tab);
   });
-  if (tab === 'hours')   loadWeekHours();
-  if (tab === 'history') loadHistory();
-  if (tab === 'spray')   { loadSprayHistory(); renderSeasonalPrompt(); populateSprayLocations(); }
+  if (tab === 'hours')  loadWeekHours();
+  if (tab === 'jobs')   { loadJobs(); loadUpcoming(); }
+  if (tab === 'spray')  { loadSprayHistory(); renderSeasonalPrompt(); }
 }
+
+// ── Loaders ──────────────────────────────────────────
 
 async function loadLocations() {
   const locs = await get('/api/locations');
@@ -118,7 +122,6 @@ async function loadLocations() {
   sel.innerHTML = '<option value="">— Choose a location —</option>';
   locs.forEach(l => sel.insertAdjacentHTML('beforeend',
     `<option value="${l.id}">${esc(l.name)}${l.address ? ' — ' + esc(l.address) : ''}</option>`));
-  // Also populate spray location dropdown
   const sp = document.getElementById('sp-loc');
   if (sp) {
     sp.innerHTML = '<option value="">— Select location —</option>';
@@ -127,9 +130,78 @@ async function loadLocations() {
   }
 }
 
-function populateSprayLocations() {
-  // Called when switching to spray tab, locations already populated in loadLocations
+async function loadClients() {
+  const clients = await get('/api/clients');
+  const sel = document.getElementById('job-client');
+  if (!sel) return;
+  const saved = sel.value;
+  sel.innerHTML = '<option value="">— Select client or skip —</option>';
+  clients.forEach(c => sel.insertAdjacentHTML('beforeend',
+    `<option value="${c.id}" data-name="${esc(c.name)}" data-phone="${esc(c.phone||'')}" data-address="${esc(c.address||'')}">${esc(c.name)}${c.phone ? ' · ' + esc(c.phone) : ''}</option>`));
+  sel.insertAdjacentHTML('beforeend', '<option value="__new__">+ New client…</option>');
+  if (saved) sel.value = saved;
 }
+
+async function loadProductsForJobForm() {
+  sprayProducts = await get('/api/spray/products');
+  const sel = document.getElementById('job-product');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select product (optional) —</option>';
+  sprayProducts.forEach(p => sel.insertAdjacentHTML('beforeend',
+    `<option value="${p.id}" data-reapply-min="${p.reapply_min_days||''}" data-reapply-max="${p.reapply_max_days||''}">${esc(p.name)}</option>`));
+}
+
+function handleClientSelect() {
+  const sel = document.getElementById('job-client');
+  if (sel.value === '__new__') {
+    show('new-client-wrap');
+  } else {
+    hide('new-client-wrap');
+    document.getElementById('job-client-name').value = '';
+    document.getElementById('job-client-phone').value = '';
+  }
+}
+
+function suggestProduct() {
+  const serviceType = document.getElementById('job-service').value;
+  if (!serviceType || !sprayProducts.length) return;
+  const sel = document.getElementById('job-product');
+  // Find a product matching the service type
+  const match = sprayProducts.find(p => p.type && p.type.toLowerCase().includes(serviceType.toLowerCase().split(' ')[0]));
+  if (match) sel.value = String(match.id);
+  // Update next-date suggestion
+  updateNextDateSuggestion();
+}
+
+function updateNextDateSuggestion() {
+  const serviceType = document.getElementById('job-service').value;
+  const prodSel = document.getElementById('job-product');
+  const prodOpt = prodSel.options[prodSel.selectedIndex];
+  const hint = document.getElementById('next-date-hint');
+  const nextInput = document.getElementById('job-next-date');
+  if (!nextInput) return;
+
+  let days = null;
+  if (prodOpt && prodOpt.dataset.reapplyMin) {
+    const min = parseInt(prodOpt.dataset.reapplyMin);
+    const max = parseInt(prodOpt.dataset.reapplyMax || prodOpt.dataset.reapplyMin);
+    days = Math.round((min + max) / 2);
+    if (hint) hint.textContent = `Suggested: ${min}–${max} days based on product`;
+  } else if (serviceType && REAPPLY_DAYS[serviceType]) {
+    days = REAPPLY_DAYS[serviceType];
+    if (hint) hint.textContent = `Suggested: ~${days} days for ${serviceType}`;
+  } else {
+    if (hint) hint.textContent = '';
+  }
+
+  if (days && !nextInput.value) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    nextInput.value = d.toISOString().split('T')[0];
+  }
+}
+
+// ── Clock In / Out ──────────────────────────────────
 
 async function refreshStatus() {
   const data = await get(`/api/entries/current/${worker.id}`);
@@ -142,47 +214,309 @@ function renderStatus() {
   if (currentEntry) {
     hide('s-out'); show('s-in');
     hide('form-in'); show('form-out');
+    const pendingJob = getPendingJob();
+    document.getElementById('s-client').textContent = pendingJob?.clientName || 'Working';
+    document.getElementById('s-service').textContent = pendingJob?.serviceType || '';
     document.getElementById('s-loc').textContent = '📍 ' + currentEntry.location_name;
     document.getElementById('s-since').textContent = 'Since ' + fmtTime(currentEntry.clock_in);
     const start = new Date(currentEntry.clock_in).getTime();
     const tick = () => { document.getElementById('s-timer').textContent = fmtElapsed(Date.now() - start); };
     tick(); timerInterval = setInterval(tick, 1000);
+    // Pre-fill next date suggestion
+    updateNextDateSuggestion();
   } else {
     show('s-out'); hide('s-in');
     show('form-in'); hide('form-out');
+    document.getElementById('job-next-date').value = '';
+    document.getElementById('next-date-hint').textContent = '';
   }
 }
 
 async function clockIn() {
   const locationId = document.getElementById('loc-select').value;
-  if (!locationId) { showAlert('Please select a location.', 'error'); return; }
+  if (!locationId) { showAlert('Please select a job site.', 'error'); return; }
+
+  // Collect optional job details
+  const clientSel = document.getElementById('job-client');
+  const clientId = (clientSel.value && clientSel.value !== '__new__') ? clientSel.value : null;
+  const isNew = clientSel.value === '__new__';
+  const clientName = isNew
+    ? document.getElementById('job-client-name').value.trim()
+    : (clientSel.selectedOptions[0]?.dataset.name || '');
+  const clientPhone = isNew
+    ? document.getElementById('job-client-phone').value.trim()
+    : (clientSel.selectedOptions[0]?.dataset.phone || '');
+  const clientAddress = clientSel.selectedOptions[0]?.dataset.address || '';
+  const serviceType = document.getElementById('job-service').value;
+  const prodSel = document.getElementById('job-product');
+  const productName = prodSel.selectedOptions[0]?.text || '';
+  const productId = prodSel.value || null;
+
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
+
   const r = await post('/api/entries/clock-in', { workerId: worker.id, locationId, latitude: lat, longitude: lng });
-  if (r.success) {
-    await refreshStatus();
-    showAlert('Clocked in!', 'success');
-  } else {
-    showAlert(r.message || 'Failed to clock in.', 'error');
+  if (!r.success) { showAlert(r.message || 'Failed to clock in.', 'error'); return; }
+
+  // If new client name given, save the client
+  let savedClientId = clientId;
+  if (isNew && clientName) {
+    try {
+      const cr = await post('/api/clients', { name: clientName, phone: clientPhone });
+      if (cr.success) { savedClientId = cr.client.id; await loadClients(); }
+    } catch {}
   }
+
+  // Persist pending job details for clock-out
+  if (clientName || serviceType || productName) {
+    localStorage.setItem('gt_pending_job', JSON.stringify({
+      clientId: savedClientId,
+      clientName,
+      clientPhone,
+      clientAddress,
+      serviceType,
+      productId,
+      productName,
+      locationId,
+    }));
+  }
+
+  await refreshStatus();
+  showAlert(clientName ? `Job started for ${clientName}!` : 'Job started!', 'success');
+}
+
+function getPendingJob() {
+  try { return JSON.parse(localStorage.getItem('gt_pending_job') || 'null'); } catch { return null; }
 }
 
 async function clockOut() {
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
   const notes = document.getElementById('out-notes').value.trim();
-  const r = await post('/api/entries/clock-out', { workerId: worker.id, latitude: lat, longitude: lng, notes, photo: photoData });
+  const nextServiceDate = document.getElementById('job-next-date').value || null;
+  const pendingJob = getPendingJob();
+
+  const job = (pendingJob && (pendingJob.productName || pendingJob.serviceType)) ? {
+    clientId: pendingJob.clientId,
+    clientName: pendingJob.clientName,
+    clientPhone: pendingJob.clientPhone,
+    clientAddress: pendingJob.clientAddress,
+    serviceType: pendingJob.serviceType,
+    product: pendingJob.productName || pendingJob.serviceType || 'Service',
+    nextServiceDate,
+  } : null;
+
+  const r = await post('/api/entries/clock-out', { workerId: worker.id, latitude: lat, longitude: lng, notes, photo: photoData, job });
   if (r.success) {
     document.getElementById('out-notes').value = '';
+    document.getElementById('job-next-date').value = '';
+    document.getElementById('next-date-hint').textContent = '';
+    localStorage.removeItem('gt_pending_job');
     clearPhoto();
     await refreshStatus(); await loadWeekHours();
-    showAlert(`Clocked out! Worked ${fmtDur(r.entry.duration_minutes)}.`, 'success');
+    showAlert(`Job complete! Worked ${fmtDur(r.entry.duration_minutes)}.`, 'success');
   } else {
     showAlert(r.message || 'Failed.', 'error');
   }
 }
 
-// Photo handling
+// ── Jobs History Tab ──────────────────────────────
+
+async function loadJobs(all = false) {
+  const records = await get(`/api/spray/records?workerId=${worker.id}`);
+  const el = document.getElementById('jobs-list');
+  if (!records.length) { el.innerHTML = '<div class="table-empty">No jobs logged yet</div>'; return; }
+  const shown = all ? records : records.slice(0, 20);
+  el.innerHTML = shown.map(r => {
+    const dur = r.duration_minutes ? fmtDur(r.duration_minutes) : null;
+    const clientDisplay = r.client_name || r.location_name || '—';
+    return `<div class="entry-row">
+      <div class="entry-main">
+        <div>
+          <div class="entry-loc">${esc(clientDisplay)}</div>
+          <div style="font-size:.775rem;color:var(--gray-600);margin-top:.1rem">${r.location_name && r.client_name ? '📍 ' + esc(r.location_name) : ''}</div>
+        </div>
+        <div style="text-align:right">
+          ${r.category ? `<div>${sprayBadge(r.category)}</div>` : ''}
+          ${dur ? `<div class="entry-dur" style="margin-top:.25rem">${dur}</div>` : ''}
+        </div>
+      </div>
+      <div class="entry-meta">
+        <span>${fmtDate(r.applied_at)}</span>
+        ${r.product ? `<span>🧪 ${esc(r.product)}</span>` : ''}
+        ${r.next_service_date ? `<span>📅 Next: ${fmtDateShort(r.next_service_date)}</span>` : ''}
+        ${r.notes ? `<span>📝 ${esc(r.notes)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadUpcoming() {
+  const records = await get(`/api/spray/upcoming?workerId=${worker.id}&days=30`);
+  const section = document.getElementById('upcoming-section');
+  const el = document.getElementById('upcoming-list');
+  if (!records.length) { hide('upcoming-section'); return; }
+  show('upcoming-section');
+  const today = new Date(); today.setHours(0,0,0,0);
+  el.innerHTML = records.map(r => {
+    const due = new Date(r.next_service_date);
+    due.setHours(0,0,0,0);
+    const diffDays = Math.round((due - today) / 86400000);
+    const urgency = diffDays < 0 ? 'badge-overtime' : diffDays <= 7 ? 'badge-warning-hrs' : 'badge-success';
+    const label   = diffDays < 0 ? `Overdue ${Math.abs(diffDays)}d` : diffDays === 0 ? 'Due Today' : `Due in ${diffDays}d`;
+    return `<div class="upcoming-row">
+      <div>
+        <div class="upcoming-client">${esc(r.client_name || r.location_name || '—')}</div>
+        <div class="upcoming-detail">${r.category || ''} · ${r.product ? esc(r.product) : ''}</div>
+      </div>
+      <span class="badge ${urgency}">${label}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Hours Tab ─────────────────────────────────────
+
+async function loadWeekHours() {
+  const d = new Date(); d.setDate(d.getDate() - d.getDay());
+  const start = d.toISOString().split('T')[0];
+  weekEntries = await get(`/api/entries/worker/${worker.id}?startDate=${start}`);
+  const mins = weekEntries.reduce((s, e) => s + (e.duration_minutes || 0), 0);
+  document.getElementById('week-hours').textContent = fmtDur(mins) || '0h';
+
+  const byDay = {};
+  weekEntries.forEach(e => {
+    const day = fmtDate(e.clock_in);
+    byDay[day] = (byDay[day] || 0) + (e.duration_minutes || 0);
+  });
+  const bd = document.getElementById('week-breakdown');
+  const days = Object.keys(byDay);
+  if (!days.length) { bd.innerHTML = '<div class="table-empty">No entries this week</div>'; return; }
+  bd.innerHTML = days.map(day => `
+    <div class="entry-row">
+      <div class="entry-main">
+        <div class="entry-loc">${esc(day)}</div>
+        <div class="entry-dur">${fmtDur(byDay[day]) || '0m'}</div>
+      </div>
+    </div>`).join('');
+}
+
+function exportHoursCSV() {
+  if (!weekEntries.length) { showAlert('Load the Hours tab first.', 'error'); return; }
+  const hdr = ['Date', 'Location', 'Clock In', 'Clock Out', 'Duration (min)', 'Duration (hrs)', 'Notes'];
+  const rows = weekEntries.map(e => [
+    fmtDate(e.clock_in), e.location_name,
+    fmtDateTime(e.clock_in), e.clock_out ? fmtDateTime(e.clock_out) : '',
+    e.duration_minutes || '', e.duration_minutes ? (e.duration_minutes / 60).toFixed(2) : '',
+    e.notes || ''
+  ]);
+  const csv = [hdr, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: `hours-${worker.name.replace(/\s+/g, '-')}-${today()}.csv`
+  });
+  a.click();
+}
+
+// ── Spray Log Tab ─────────────────────────────────
+
+const SPRAY_PRODUCTS_BY_CAT = {
+  'Pre-emergent': ['Prodiamine 65 WDG', 'Barricade 4FL', 'Dimension 0.15G', 'Pendimethalin', 'Other'],
+  'Weed Control': ['Celsius WG', 'Trimec / 3-Way', 'Certainty', 'Drive XLR8', 'Roundup (spot treat)', 'Other'],
+  'Fertilizer': ['16-4-8 Slow Release', '24-0-11 Summer Blend', '12-12-12 Balanced', '0-0-7 Potassium', 'Milorganite', 'Winterizer', 'Other'],
+  'Fungicide': ['Heritage G', 'Headway G', 'Pillar G', 'Clearys 3336 F', 'Triton Flo', 'Other'],
+  'Pest Control': ['Dylox 6.2G', 'Talstar P', 'Meridian 25WG', 'Sevin SL', 'Safari 20SG', 'Other'],
+  'Other': ['Custom / Other'],
+};
+
+function updateProductList() {
+  const cat = document.getElementById('sp-cat').value;
+  const sel = document.getElementById('sp-prod');
+  const custom = document.getElementById('sp-prod-custom');
+  // Merge hardcoded + DB products for this category
+  const dbMatches = sprayProducts.filter(p => !cat || (p.type && p.type.toLowerCase().includes(cat.toLowerCase().split(' ')[0])));
+  const staticList = SPRAY_PRODUCTS_BY_CAT[cat] || [];
+  const allNames = [...new Set([...dbMatches.map(p => p.name), ...staticList])];
+  if (!allNames.length) {
+    sel.innerHTML = '<option value="">— Select category first —</option>';
+    hide('sp-prod-custom'); return;
+  }
+  sel.innerHTML = allNames.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.onchange = () => {
+    if (sel.value === 'Other') show('sp-prod-custom');
+    else { hide('sp-prod-custom'); custom.value = ''; }
+  };
+  hide('sp-prod-custom'); custom.value = '';
+}
+
+async function logSpray() {
+  const locationId = document.getElementById('sp-loc').value || null;
+  const cat      = document.getElementById('sp-cat').value;
+  const prodSel  = document.getElementById('sp-prod').value;
+  const prodCustom = document.getElementById('sp-prod-custom').value.trim();
+  const product  = (prodSel === 'Other' || !prodSel) ? prodCustom : prodSel;
+  const appliedAt = document.getElementById('sp-date').value;
+  const notes    = document.getElementById('sp-notes').value.trim();
+
+  if (!cat)     { showAlert('Please select a category.', 'error'); return; }
+  if (!product) { showAlert('Please select or enter a product.', 'error'); return; }
+
+  const r = await post('/api/spray/records', {
+    workerId: worker.id, locationId, product, category: cat,
+    appliedAt: appliedAt ? new Date(appliedAt).toISOString() : new Date().toISOString(), notes
+  });
+  if (r.success) {
+    document.getElementById('sp-cat').value = '';
+    document.getElementById('sp-prod').innerHTML = '<option value="">— Select category first —</option>';
+    document.getElementById('sp-prod-custom').value = '';
+    hide('sp-prod-custom');
+    document.getElementById('sp-notes').value = '';
+    showAlert('Application logged!', 'success');
+    loadSprayHistory();
+  } else {
+    showAlert(r.message || 'Failed to log.', 'error');
+  }
+}
+
+async function loadSprayHistory() {
+  const records = await get(`/api/spray/records?workerId=${worker.id}`);
+  const el = document.getElementById('spray-list');
+  if (!records.length) { el.innerHTML = '<div class="table-empty">No applications logged yet</div>'; return; }
+  el.innerHTML = records.slice(0, 15).map(r => `
+    <div class="entry-row">
+      <div class="entry-main">
+        <div class="entry-loc">${esc(r.product)}</div>
+        <div>${sprayBadge(r.category)}</div>
+      </div>
+      <div class="entry-meta">
+        <span>${fmtDate(r.applied_at)}</span>
+        ${r.location_name ? `<span>📍 ${esc(r.location_name)}</span>` : ''}
+        ${r.notes ? `<span>📝 ${esc(r.notes)}</span>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function sprayBadge(cat) {
+  if (!cat) return '';
+  const cls = cat === 'Fertilizer' ? 'badge-fert'
+    : (cat === 'Weed Control' || cat === 'Pre-emergent') ? 'badge-herb'
+    : cat === 'Fungicide' ? 'badge-fung'
+    : cat === 'Pest Control' ? 'badge-ins'
+    : 'badge-gray';
+  return `<span class="badge ${cls}">${esc(cat)}</span>`;
+}
+
+function renderSeasonalPrompt() {
+  const month = new Date().getMonth();
+  const season = SEASONAL.find(s => s.months.includes(month));
+  const el = document.getElementById('seasonal-prompt');
+  if (!season || !el) return;
+  el.innerHTML = `
+    <h3>🗓 ${season.label} — Recommended This Month</h3>
+    <ul>${season.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
+}
+
+// ── Photo ─────────────────────────────────────────
+
 function handlePhoto(input) {
   const file = input.files[0];
   if (!file) return;
@@ -224,180 +558,24 @@ function closePhotoModal() {
   document.getElementById('photo-modal-img').src = '';
 }
 
-async function loadHistory(all = false) {
-  allEntries = await get(`/api/entries/worker/${worker.id}${all ? '' : '?endDate=' + today()}`);
-  const el = document.getElementById('entries-list');
-  if (!allEntries.length) { el.innerHTML = '<div class="table-empty">No entries yet</div>'; return; }
-  const shown = all ? allEntries : allEntries.slice(0, 15);
-  el.innerHTML = shown.map(e => `
-    <div class="entry-row">
-      <div class="entry-main">
-        <div class="entry-loc">${esc(e.location_name)}</div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="entry-dur">${e.duration_minutes ? fmtDur(e.duration_minutes) : (e.clock_out ? '0m' : '<span class="badge badge-success">Active</span>')}</div>
-          ${e.has_photo ? `<button class="btn btn-ghost btn-sm" style="color:var(--green);padding:.1rem .35rem" onclick="viewPhoto(${e.id})">📷</button>` : ''}
-        </div>
-      </div>
-      <div class="entry-meta">
-        <span>${fmtDate(e.clock_in)}</span>
-        <span>${fmtTime(e.clock_in)} → ${e.clock_out ? fmtTime(e.clock_out) : 'now'}</span>
-        ${e.notes ? `<span>📝 ${esc(e.notes)}</span>` : ''}
-      </div>
-    </div>`).join('');
-}
+// ── Push Notifications ────────────────────────────
 
-async function loadWeekHours() {
-  const d = new Date(); d.setDate(d.getDate() - d.getDay());
-  const start = d.toISOString().split('T')[0];
-  const entries = await get(`/api/entries/worker/${worker.id}?startDate=${start}`);
-  const mins = entries.reduce((s, e) => s + (e.duration_minutes || 0), 0);
-  document.getElementById('week-hours').textContent = fmtDur(mins) || '0h';
-
-  const byDay = {};
-  entries.forEach(e => {
-    const day = fmtDate(e.clock_in);
-    byDay[day] = (byDay[day] || 0) + (e.duration_minutes || 0);
-  });
-  const bd = document.getElementById('week-breakdown');
-  const days = Object.keys(byDay);
-  if (!days.length) {
-    bd.innerHTML = '<div class="table-empty">No entries this week</div>';
-    return;
-  }
-  bd.innerHTML = days.map(day => `
-    <div class="entry-row">
-      <div class="entry-main">
-        <div class="entry-loc">${esc(day)}</div>
-        <div class="entry-dur">${fmtDur(byDay[day]) || '0m'}</div>
-      </div>
-    </div>`).join('');
-}
-
-function exportHoursCSV() {
-  if (!allEntries.length) { showAlert('Load history first.', 'error'); return; }
-  const hdr = ['Date', 'Location', 'Clock In', 'Clock Out', 'Duration (min)', 'Duration (hrs)', 'Notes'];
-  const rows = allEntries.map(e => [
-    fmtDate(e.clock_in), e.location_name,
-    fmtDateTime(e.clock_in), e.clock_out ? fmtDateTime(e.clock_out) : '',
-    e.duration_minutes || '', e.duration_minutes ? (e.duration_minutes / 60).toFixed(2) : '',
-    e.notes || ''
-  ]);
-  const csv = [hdr, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
-    download: `hours-${worker.name.replace(/\s+/g, '-')}-${today()}.csv`
-  });
-  a.click();
-}
-
-// Spray Log
-function updateProductList() {
-  const cat = document.getElementById('sp-cat').value;
-  const sel = document.getElementById('sp-prod');
-  const custom = document.getElementById('sp-prod-custom');
-  if (!cat || !SPRAY_PRODUCTS[cat]) {
-    sel.innerHTML = '<option value="">— Select category first —</option>';
-    hide('sp-prod-custom');
-    return;
-  }
-  sel.innerHTML = SPRAY_PRODUCTS[cat].map(p => `<option value="${p}">${p}</option>`).join('');
-  sel.onchange = () => {
-    if (sel.value === 'Other') show('sp-prod-custom');
-    else { hide('sp-prod-custom'); custom.value = ''; }
-  };
-  hide('sp-prod-custom');
-  custom.value = '';
-}
-
-async function logSpray() {
-  const locationId = document.getElementById('sp-loc').value || null;
-  const cat   = document.getElementById('sp-cat').value;
-  const prodSel = document.getElementById('sp-prod').value;
-  const prodCustom = document.getElementById('sp-prod-custom').value.trim();
-  const product = (prodSel === 'Other' || !prodSel) ? prodCustom : prodSel;
-  const appliedAt = document.getElementById('sp-date').value;
-  const notes = document.getElementById('sp-notes').value.trim();
-
-  if (!cat)      { showAlert('Please select a category.', 'error'); return; }
-  if (!product)  { showAlert('Please select or enter a product.', 'error'); return; }
-
-  const r = await post('/api/spray/records', {
-    workerId: worker.id, locationId, product, category: cat,
-    appliedAt: appliedAt ? new Date(appliedAt).toISOString() : new Date().toISOString(),
-    notes
-  });
-  if (r.success) {
-    document.getElementById('sp-cat').value = '';
-    document.getElementById('sp-prod').innerHTML = '<option value="">— Select category first —</option>';
-    document.getElementById('sp-prod-custom').value = '';
-    hide('sp-prod-custom');
-    document.getElementById('sp-notes').value = '';
-    showAlert('Application logged!', 'success');
-    loadSprayHistory();
-  } else {
-    showAlert(r.message || 'Failed to log.', 'error');
-  }
-}
-
-async function loadSprayHistory() {
-  const records = await get(`/api/spray/records?workerId=${worker.id}`);
-  const el = document.getElementById('spray-list');
-  if (!records.length) { el.innerHTML = '<div class="table-empty">No applications logged yet</div>'; return; }
-  el.innerHTML = records.map(r => `
-    <div class="entry-row">
-      <div class="entry-main">
-        <div class="entry-loc">${esc(r.product)}</div>
-        <div>${sprayBadge(r.category)}</div>
-      </div>
-      <div class="entry-meta">
-        <span>${fmtDate(r.applied_at)}</span>
-        ${r.location_name ? `<span>📍 ${esc(r.location_name)}</span>` : ''}
-        ${r.notes ? `<span>📝 ${esc(r.notes)}</span>` : ''}
-      </div>
-    </div>`).join('');
-}
-
-function sprayBadge(cat) {
-  if (!cat) return '';
-  const cls = cat.startsWith('Fert') ? 'badge-fert'
-    : cat.startsWith('Pre') ? 'badge-herb'
-    : cat.startsWith('Post') ? 'badge-herb'
-    : cat.startsWith('Fung') ? 'badge-fung'
-    : cat.startsWith('Ins') ? 'badge-ins'
-    : 'badge-gray';
-  return `<span class="badge ${cls}">${esc(cat)}</span>`;
-}
-
-function renderSeasonalPrompt() {
-  const month = new Date().getMonth();
-  const season = SEASONAL.find(s => s.months.includes(month));
-  const el = document.getElementById('seasonal-prompt');
-  if (!season || !el) return;
-  el.innerHTML = `
-    <h3>🗓 ${season.label} — What's Due</h3>
-    <ul>${season.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
-}
-
-// Push Notifications
 async function setupPushNotifications() {
   if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
-    if (existing) return; // already subscribed
-
+    if (existing) return;
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
-
     const cfg = await get('/api/config');
     if (!cfg.vapidPublicKey) return;
-
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(cfg.vapidPublicKey)
     });
     await post('/api/push/subscribe', { workerId: worker.id, subscription: sub.toJSON() });
-  } catch { /* push not supported or denied */ }
+  } catch {}
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -407,7 +585,8 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-// Helpers
+// ── Helpers ───────────────────────────────────────
+
 function getGPS() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) { rej(); return; }
@@ -425,6 +604,7 @@ function fmtDur(m) {
 }
 function fmtTime(iso) { return iso ? new Date(iso).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : ''; }
 function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) : ''; }
+function fmtDateShort(iso) { return iso ? new Date(iso + 'T12:00:00').toLocaleDateString([],{month:'short',day:'numeric'}) : ''; }
 function fmtDateTime(iso) { const d = new Date(iso); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString(); }
 function today() { return new Date().toISOString().split('T')[0]; }
 function pad(n) { return String(n).padStart(2,'0'); }

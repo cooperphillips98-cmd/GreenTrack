@@ -154,6 +154,18 @@ tr:hover td{background:var(--gray-50)}
   .workers-grid{grid-template-columns:1fr}
 }
 
+/* ── Job Details Divider ── */
+.job-details-divider{display:flex;align-items:center;margin:.5rem 0 .875rem;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-500)}
+.job-details-divider::before,.job-details-divider::after{content:'';flex:1;height:1px;background:var(--gray-200)}
+.job-details-divider::before{margin-right:.6rem}
+.job-details-divider::after{margin-left:.6rem}
+
+/* ── Upcoming card status dots ── */
+.upcoming-row{display:flex;align-items:flex-start;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid var(--gray-100)}
+.upcoming-row:last-child{border-bottom:none}
+.upcoming-client{font-weight:700;font-size:.875rem}
+.upcoming-detail{font-size:.775rem;color:var(--gray-500);margin-top:.1rem}
+
 /* ── Seasonal Prompt ── */
 .seasonal-card{background:linear-gradient(135deg,var(--green-dark),var(--green));color:#fff;border-radius:var(--r);padding:1.1rem 1.25rem;margin-bottom:.875rem;box-shadow:var(--shadow)}
 .seasonal-card h3{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.75;margin-bottom:.5rem}

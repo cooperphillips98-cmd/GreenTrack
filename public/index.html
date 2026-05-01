@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
   <meta name="theme-color" content="#1b4332">
@@ -19,7 +19,7 @@
     <div class="login-card">
       <div class="login-logo">
         <img src="/logo.png" alt="Legacy Landscape Management" style="max-width:220px;margin-bottom:.5rem;display:block;margin-left:auto;margin-right:auto">
-        <p>Employee Time Tracker</p>
+        <p>Employee Field App</p>
       </div>
       <div id="login-error" class="alert alert-error section-hidden"></div>
       <div class="form-group">
@@ -58,38 +58,90 @@
 
   <div id="app-alert" class="section-hidden" style="margin:.75rem 1rem 0"></div>
 
-  <!-- TAB: Clock In/Out -->
+  <!-- TAB: Clock / Start Job -->
   <div id="tab-clock" class="tab-pane container" style="padding-top:1rem">
+
+    <!-- Status: clocked out -->
     <div id="s-out" class="clock-status out">
       <span class="clock-icon">⏸</span>
-      <div class="clock-label">You're Clocked Out</div>
-      <div class="clock-sub">Select a job site below to start</div>
+      <div class="clock-label">Ready to Start</div>
+      <div class="clock-sub">Fill in job details below</div>
     </div>
+
+    <!-- Status: clocked in / active job -->
     <div id="s-in" class="clock-status in section-hidden">
       <span class="clock-icon">▶</span>
-      <div class="clock-label">Currently Working</div>
+      <div id="s-client" class="clock-label">Working</div>
+      <div id="s-service" class="clock-sub" style="font-weight:600;margin-bottom:.1rem"></div>
       <div id="s-loc" class="clock-sub"></div>
       <div id="s-timer" class="clock-timer">0:00:00</div>
       <div id="s-since" class="clock-sub"></div>
     </div>
+
+    <!-- Start Job form -->
     <div id="form-in" class="card">
-      <div class="card-title">Clock In</div>
-      <div class="form-group" style="margin-bottom:.75rem">
-        <label class="form-label">Select Job Site</label>
+      <div class="card-title">Start Job</div>
+
+      <div class="form-group">
+        <label class="form-label">Job Site / Location <span style="color:var(--red)">*</span></label>
         <select id="loc-select" class="form-control">
           <option value="">— Choose a location —</option>
         </select>
       </div>
-      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Clock In</button>
-    </div>
-    <div id="form-out" class="card section-hidden">
-      <div class="card-title">Clock Out</div>
-      <div class="form-group" style="margin-bottom:.75rem">
-        <label class="form-label">Notes (optional)</label>
-        <input id="out-notes" type="text" class="form-control" placeholder="e.g. Mowed front lawn, trimmed hedges">
+
+      <div class="job-details-divider">
+        <span>Job Details <span class="text-muted" style="font-weight:400;font-size:.75rem">(optional)</span></span>
       </div>
-      <div class="form-group" style="margin-bottom:.75rem">
-        <label class="form-label">Job Photo (optional)</label>
+
+      <div class="form-group">
+        <label class="form-label">Client</label>
+        <select id="job-client" class="form-control" onchange="handleClientSelect()">
+          <option value="">— Select or skip —</option>
+          <option value="__new__">+ New client…</option>
+        </select>
+      </div>
+      <div id="new-client-wrap" class="section-hidden" style="margin-top:-.4rem;margin-bottom:.875rem">
+        <input id="job-client-name" type="text" class="form-control" placeholder="Client full name" style="margin-bottom:.4rem">
+        <input id="job-client-phone" type="tel" class="form-control" placeholder="Phone (optional)">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Service Type</label>
+        <select id="job-service" class="form-control" onchange="suggestProduct()">
+          <option value="">— Select service —</option>
+          <option>Weed Control</option>
+          <option>Fertilizer</option>
+          <option>Pest Control</option>
+          <option>Pre-emergent</option>
+          <option>Fungicide</option>
+          <option>Custom</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Product</label>
+        <select id="job-product" class="form-control">
+          <option value="">— Select product (optional) —</option>
+        </select>
+      </div>
+
+      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Start Job</button>
+    </div>
+
+    <!-- End Job form -->
+    <div id="form-out" class="card section-hidden">
+      <div class="card-title">End Job</div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <input id="out-notes" type="text" class="form-control" placeholder="e.g. Treated front and back lawn">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Next Visit</label>
+        <input id="job-next-date" type="date" class="form-control">
+        <div id="next-date-hint" style="font-size:.75rem;color:var(--gray-500);margin-top:.2rem"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Job Photo <span class="text-muted" style="font-weight:400">(optional)</span></label>
         <div id="photo-preview-wrap" class="section-hidden" style="margin-bottom:.5rem">
           <img id="photo-preview" src="" alt="" style="width:100%;border-radius:var(--r-sm);max-height:200px;object-fit:cover">
           <button class="btn btn-outline btn-sm" style="margin-top:.4rem;width:100%" onclick="clearPhoto()">✕ Remove Photo</button>
@@ -99,7 +151,7 @@
           <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this)">
         </label>
       </div>
-      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ Clock Out</button>
+      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ End Job</button>
     </div>
   </div>
 
@@ -118,18 +170,24 @@
     </div>
   </div>
 
-  <!-- TAB: History -->
-  <div id="tab-history" class="tab-pane section-hidden container" style="padding-top:1rem">
+  <!-- TAB: Jobs (history) -->
+  <div id="tab-jobs" class="tab-pane section-hidden container" style="padding-top:1rem">
+    <div id="upcoming-section" class="section-hidden">
+      <div class="card" style="border-left:4px solid var(--green)">
+        <div class="card-title">Upcoming Services</div>
+        <div id="upcoming-list"></div>
+      </div>
+    </div>
     <div class="card">
       <div class="sec-hdr">
-        <div class="card-title mb-0">Time History</div>
-        <button class="btn btn-outline btn-sm" onclick="loadHistory(true)">Load All</button>
+        <div class="card-title mb-0">Recent Jobs</div>
+        <button class="btn btn-outline btn-sm" onclick="loadJobs(true)">Load All</button>
       </div>
-      <div id="entries-list"><div class="table-empty">No entries yet</div></div>
+      <div id="jobs-list"><div class="table-empty">No jobs yet</div></div>
     </div>
   </div>
 
-  <!-- TAB: Spray Log -->
+  <!-- TAB: Spray Log (standalone) -->
   <div id="tab-spray" class="tab-pane section-hidden container" style="padding-top:1rem">
     <div id="seasonal-prompt" class="seasonal-card"></div>
     <div class="card">
@@ -145,11 +203,10 @@
         <select id="sp-cat" class="form-control" onchange="updateProductList()">
           <option value="">— Select category —</option>
           <option>Pre-emergent</option>
-          <option>Post-emergent Herbicide</option>
+          <option>Weed Control</option>
           <option>Fertilizer</option>
           <option>Fungicide</option>
-          <option>Insecticide / Grub Control</option>
-          <option>Dormant / Horticultural Oil</option>
+          <option>Pest Control</option>
           <option>Other</option>
         </select>
       </div>
@@ -186,9 +243,9 @@
       <span class="bottom-nav-icon">📊</span>
       Hours
     </button>
-    <button class="bottom-nav-btn" id="nav-history" onclick="showWorkerTab('history')">
-      <span class="bottom-nav-icon">📋</span>
-      History
+    <button class="bottom-nav-btn" id="nav-jobs" onclick="showWorkerTab('jobs')">
+      <span class="bottom-nav-icon">🗂</span>
+      Jobs
     </button>
     <button class="bottom-nav-btn" id="nav-spray" onclick="showWorkerTab('spray')">
       <span class="bottom-nav-icon">🌿</span>
