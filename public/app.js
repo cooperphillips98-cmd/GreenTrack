@@ -240,7 +240,7 @@ async function refreshStatus() {
 function renderStatus() {
   clearInterval(timerInterval);
   if (currentEntry) {
-    hide('s-out'); show('s-in');
+    show('s-in');
     hide('form-in'); show('form-out');
     const pendingJob = getPendingJob();
     document.getElementById('s-client').textContent = pendingJob?.clientName || pendingJob?.jobType || 'Working';
@@ -250,13 +250,9 @@ function renderStatus() {
     const start = new Date(currentEntry.clock_in).getTime();
     const tick = () => { document.getElementById('s-timer').textContent = fmtElapsed(Date.now() - start); };
     tick(); timerInterval = setInterval(tick, 1000);
-    // Pre-fill next date suggestion
-    updateNextDateSuggestion();
   } else {
-    show('s-out'); hide('s-in');
+    hide('s-in');
     show('form-in'); hide('form-out');
-    document.getElementById('job-next-date').value = '';
-    document.getElementById('next-date-hint').textContent = '';
   }
 }
 
@@ -290,7 +286,7 @@ async function clockIn() {
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
 
-  if (startBtn) { startBtn.disabled = false; startBtn.textContent = '▶ Start Job'; }
+  if (startBtn) { startBtn.disabled = false; startBtn.textContent = '▶ Clock In'; }
 
   const r = await post('/api/entries/clock-in', { workerId: worker.id, locationId, latitude: lat, longitude: lng, jobType });
   if (!r.success) { showAlert(r.message || 'Failed to clock in.', 'error'); return; }
@@ -333,7 +329,7 @@ async function clockOut() {
   let lat = null, lng = null;
   try { const p = await getGPS(); lat = p.coords.latitude; lng = p.coords.longitude; } catch {}
   const notes = document.getElementById('out-notes').value.trim();
-  const nextServiceDate = document.getElementById('job-next-date').value || null;
+  const nextServiceDate = document.getElementById('job-next-date')?.value || null;
   const pendingJob = getPendingJob();
 
   const job = (pendingJob && (pendingJob.productName || pendingJob.serviceType)) ? {
@@ -349,8 +345,6 @@ async function clockOut() {
   const r = await post('/api/entries/clock-out', { workerId: worker.id, latitude: lat, longitude: lng, notes, photo: photoData, job });
   if (r.success) {
     document.getElementById('out-notes').value = '';
-    document.getElementById('job-next-date').value = '';
-    document.getElementById('next-date-hint').textContent = '';
     localStorage.removeItem('gt_pending_job');
     clearPhoto();
     await refreshStatus(); await loadWeekHours();
@@ -679,8 +673,8 @@ function fmtDateTime(iso) { const d = new Date(iso); return d.toLocaleDateString
 function today() { return new Date().toISOString().split('T')[0]; }
 function pad(n) { return String(n).padStart(2,'0'); }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function show(id) { document.getElementById(id).classList.remove('section-hidden'); }
-function hide(id) { document.getElementById(id).classList.add('section-hidden'); }
+function show(id) { const el=document.getElementById(id); if(el) el.classList.remove('section-hidden'); }
+function hide(id) { const el=document.getElementById(id); if(el) el.classList.add('section-hidden'); }
 function showLoginErr(msg) {
   const el = document.getElementById('login-error');
   el.textContent = msg; show('login-error');

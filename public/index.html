@@ -58,17 +58,10 @@
 
   <div id="app-alert" class="section-hidden" style="margin:.75rem 1rem 0"></div>
 
-  <!-- TAB: Clock / Start Job -->
+  <!-- TAB: Clock -->
   <div id="tab-clock" class="tab-pane container" style="padding-top:1rem">
 
-    <!-- Status: clocked out -->
-    <div id="s-out" class="clock-status out">
-      <span class="clock-icon">⏸</span>
-      <div class="clock-label">Ready to Start</div>
-      <div class="clock-sub">Fill in job details below</div>
-    </div>
-
-    <!-- Status: clocked in / active job -->
+    <!-- Active job status (shown when clocked in) -->
     <div id="s-in" class="clock-status in section-hidden">
       <span class="clock-icon">▶</span>
       <div id="s-client" class="clock-label">Working</div>
@@ -78,12 +71,12 @@
       <div id="s-since" class="clock-sub"></div>
     </div>
 
-    <!-- Start Job form -->
+    <!-- Clock In form (shown when not clocked in) -->
     <div id="form-in" class="card">
-      <div class="card-title">Start Job</div>
+      <div class="card-title">Clock In</div>
 
       <div class="form-group">
-        <label class="form-label">Job Site / Location <span style="color:var(--red)">*</span></label>
+        <label class="form-label">Location <span style="color:var(--red)">*</span></label>
         <select id="loc-select" class="form-control">
           <option value="">— Choose a location —</option>
         </select>
@@ -103,12 +96,11 @@
         </select>
       </div>
 
-      <!-- Spray-specific details — only visible when "Spray / Treatment" is selected -->
+      <!-- Spray details — only shown when Spray / Treatment selected + spray access -->
       <div id="spray-job-fields" class="section-hidden">
         <div class="job-details-divider">
           <span>Treatment Details <span class="text-muted" style="font-weight:400;font-size:.75rem">(optional)</span></span>
         </div>
-
         <div class="form-group">
           <label class="form-label">Client</label>
           <select id="job-client" class="form-control" onchange="handleClientSelect()">
@@ -120,7 +112,6 @@
           <input id="job-client-name" type="text" class="form-control" placeholder="Client full name" style="margin-bottom:.4rem">
           <input id="job-client-phone" type="tel" class="form-control" placeholder="Phone (optional)">
         </div>
-
         <div class="form-group">
           <label class="form-label">Service Type</label>
           <select id="job-service" class="form-control" onchange="suggestProduct()">
@@ -133,7 +124,6 @@
             <option>Custom</option>
           </select>
         </div>
-
         <div class="form-group">
           <label class="form-label">Product</label>
           <select id="job-product" class="form-control">
@@ -142,23 +132,18 @@
         </div>
       </div>
 
-      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Start Job</button>
+      <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Clock In</button>
     </div>
 
-    <!-- End Job form -->
+    <!-- Clock Out form (shown when clocked in) -->
     <div id="form-out" class="card section-hidden">
-      <div class="card-title">End Job</div>
+      <div class="card-title">Clock Out</div>
       <div class="form-group">
-        <label class="form-label">Notes</label>
-        <input id="out-notes" type="text" class="form-control" placeholder="e.g. Treated front and back lawn">
+        <label class="form-label">Notes <span class="text-muted" style="font-weight:400">(optional)</span></label>
+        <input id="out-notes" type="text" class="form-control" placeholder="e.g. Finished front and back lawn">
       </div>
       <div class="form-group">
-        <label class="form-label">Next Visit</label>
-        <input id="job-next-date" type="date" class="form-control">
-        <div id="next-date-hint" style="font-size:.75rem;color:var(--gray-500);margin-top:.2rem"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Job Photo <span class="text-muted" style="font-weight:400">(optional)</span></label>
+        <label class="form-label">Photo <span class="text-muted" style="font-weight:400">(optional)</span></label>
         <div id="photo-preview-wrap" class="section-hidden" style="margin-bottom:.5rem">
           <img id="photo-preview" src="" alt="" style="width:100%;border-radius:var(--r-sm);max-height:200px;object-fit:cover">
           <button class="btn btn-outline btn-sm" style="margin-top:.4rem;width:100%" onclick="clearPhoto()">✕ Remove Photo</button>
@@ -168,7 +153,7 @@
           <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this)">
         </label>
       </div>
-      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ End Job</button>
+      <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ Clock Out</button>
     </div>
   </div>
 
