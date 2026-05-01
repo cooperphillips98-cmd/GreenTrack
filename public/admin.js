@@ -1,10 +1,9 @@
 let allEntries = [];
 let activeWorkers = [];
 let allLocations = [];
-let gMap = null;
-let drawingManager = null;
-let currentPolygon = null;
-let googleMapsKey = null;
+let propertyMap = null;
+let drawnItems = null;
+let MAPBOX_TOKEN = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('gt_admin') === 'true') showAdminApp();
@@ -44,8 +43,7 @@ function adminSignOut() {
 
 async function showAdminApp() {
   hide('admin-login'); show('admin-app');
-  const cfg = await get('/api/config');
-  googleMapsKey = cfg.googleMapsKey;
+  try { const cfg = await get('/api/config'); MAPBOX_TOKEN = cfg.mapboxToken; } catch {}
   await Promise.all([loadStats(), loadActive(), loadWorkers(), loadLocations()]);
   setInterval(updateTimers, 1000);
   setInterval(() => { if (!document.getElementById('tab-dashboard').classList.contains('section-hidden')) { loadStats(); loadActive(); } }, 30000);
@@ -150,111 +148,82 @@ async function loadLocations() {
   }).join('');
 }
 
-function loadGoogleMapsScript(key) {
-  return new Promise(resolve => {
-    if (window.google && window.google.maps) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=drawing,places`;
-    s.onload = resolve;
-    document.head.appendChild(s);
-  });
-}
-
-async function openMapModal(id) {
+function openMapModal(id) {
   const loc = allLocations.find(l => l.id === id);
   if (!loc) return;
   document.getElementById('map-loc-id').value = id;
   document.getElementById('map-loc-name').textContent = loc.name;
+  document.getElementById('map-search').value = '';
   document.getElementById('m-property-map').classList.add('open');
 
-  await loadGoogleMapsScript(googleMapsKey);
-  setTimeout(() => initGoogleMap(loc), 100);
+  setTimeout(() => {
+    if (propertyMap) { propertyMap.remove(); propertyMap = null; }
+
+    const center = loc.geofence_lat && loc.geofence_lng
+      ? [loc.geofence_lat, loc.geofence_lng] : [39.5, -98.35];
+
+    propertyMap = L.map('property-map').setView(center, loc.geofence_lat ? 19 : 4);
+
+    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`, {
+      attribution: '© <a href="https://mapbox.com">Mapbox</a>',
+      maxZoom: 22, tileSize: 256,
+    }).addTo(propertyMap);
+
+    drawnItems = new L.FeatureGroup().addTo(propertyMap);
+
+    if (loc.polygon && loc.polygon.length >= 3) {
+      const poly = L.polygon(loc.polygon, { color: '#1f8f3a', fillOpacity: 0.25 });
+      drawnItems.addLayer(poly);
+      propertyMap.fitBounds(poly.getBounds(), { padding: [30, 30] });
+    }
+
+    new L.Control.Draw({
+      draw: {
+        polygon: { shapeOptions: { color: '#1f8f3a', fillOpacity: 0.25 }, allowIntersection: false },
+        polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
+      },
+      edit: { featureGroup: drawnItems },
+    }).addTo(propertyMap);
+
+    propertyMap.on(L.Draw.Event.CREATED, e => {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(e.layer);
+    });
+  }, 150);
 }
 
-function initGoogleMap(loc) {
-  const mapDiv = document.getElementById('property-map');
-  mapDiv.innerHTML = '';
-  currentPolygon = null;
-
-  const center = loc.geofence_lat && loc.geofence_lng
-    ? { lat: loc.geofence_lat, lng: loc.geofence_lng }
-    : { lat: 39.5, lng: -98.35 };
-
-  gMap = new google.maps.Map(mapDiv, {
-    center,
-    zoom: loc.geofence_lat ? 19 : 5,
-    mapTypeId: 'satellite',
-    tilt: 0,
-    mapTypeControlOptions: { mapTypeIds: ['satellite', 'hybrid', 'roadmap'] },
-  });
-
-  if (loc.polygon && loc.polygon.length >= 3) {
-    const path = loc.polygon.map(([lat, lng]) => ({ lat, lng }));
-    currentPolygon = new google.maps.Polygon({
-      paths: path,
-      strokeColor: '#1f8f3a', strokeOpacity: 0.9, strokeWeight: 2,
-      fillColor: '#1f8f3a', fillOpacity: 0.25,
-      editable: true, map: gMap,
-    });
-    const bounds = new google.maps.LatLngBounds();
-    path.forEach(p => bounds.extend(p));
-    gMap.fitBounds(bounds);
-  }
-
-  drawingManager = new google.maps.drawing.DrawingManager({
-    drawingMode: currentPolygon ? null : google.maps.drawing.OverlayType.POLYGON,
-    drawingControl: true,
-    drawingControlOptions: {
-      position: google.maps.ControlPosition.TOP_CENTER,
-      drawingModes: [google.maps.drawing.OverlayType.POLYGON],
-    },
-    polygonOptions: {
-      strokeColor: '#1f8f3a', strokeOpacity: 0.9, strokeWeight: 2,
-      fillColor: '#1f8f3a', fillOpacity: 0.25, editable: true,
-    },
-  });
-  drawingManager.setMap(gMap);
-
-  google.maps.event.addListener(drawingManager, 'polygoncomplete', poly => {
-    if (currentPolygon) currentPolygon.setMap(null);
-    currentPolygon = poly;
-    drawingManager.setDrawingMode(null);
-  });
-
-  const searchInput = document.getElementById('map-search');
-  searchInput.value = '';
-  const autocomplete = new google.maps.places.Autocomplete(searchInput);
-  autocomplete.bindTo('bounds', gMap);
-  autocomplete.addListener('place_changed', () => {
-    const place = autocomplete.getPlace();
-    if (!place.geometry) return;
-    if (place.geometry.viewport) {
-      gMap.fitBounds(place.geometry.viewport);
+async function searchMapAddress() {
+  const q = document.getElementById('map-search').value.trim();
+  if (!q || !MAPBOX_TOKEN || !propertyMap) return;
+  try {
+    const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=1`);
+    const d = await r.json();
+    if (d.features && d.features.length) {
+      const [lng, lat] = d.features[0].center;
+      propertyMap.setView([lat, lng], 19);
     } else {
-      gMap.setCenter(place.geometry.location);
-      gMap.setZoom(19);
+      showAlert('Address not found.', 'error');
     }
-  });
+  } catch { showAlert('Search failed.', 'error'); }
 }
 
 function closeMapModal() {
   document.getElementById('m-property-map').classList.remove('open');
-  if (currentPolygon) { currentPolygon.setMap(null); currentPolygon = null; }
-  gMap = null; drawingManager = null;
+  if (propertyMap) { propertyMap.remove(); propertyMap = null; }
+  drawnItems = null;
 }
 
 function clearMapPolygon() {
-  if (currentPolygon) { currentPolygon.setMap(null); currentPolygon = null; }
-  if (drawingManager) drawingManager.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
+  if (drawnItems) drawnItems.clearLayers();
 }
 
 async function savePolygon() {
   const id = document.getElementById('map-loc-id').value;
   let polygon = null;
-  if (currentPolygon) {
-    polygon = [];
-    currentPolygon.getPath().forEach(ll => polygon.push([ll.lat(), ll.lng()]));
-  }
+  drawnItems.eachLayer(layer => {
+    if (layer instanceof L.Polygon)
+      polygon = layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+  });
   await put(`/api/admin/locations/${id}/polygon`, { polygon });
   closeMapModal();
   loadLocations();

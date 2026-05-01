@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Legacy Landscape Management – Admin</title>
   <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
 </head>
 <body>
 
@@ -274,7 +276,10 @@
     <div style="padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--gray-200);flex-shrink:0;gap:1rem">
       <div style="flex:1;min-width:0">
         <div class="card-title" style="margin:0 0 .4rem">Property Lines – <span id="map-loc-name"></span></div>
-        <input id="map-search" type="text" class="form-control" placeholder="🔍 Search address or place…" style="font-size:.85rem">
+        <div style="display:flex;gap:.4rem">
+          <input id="map-search" type="text" class="form-control" placeholder="🔍 Search address…" style="font-size:.85rem" onkeydown="if(event.key==='Enter')searchMapAddress()">
+          <button class="btn btn-outline btn-sm" onclick="searchMapAddress()">Go</button>
+        </div>
       </div>
       <div style="display:flex;gap:.5rem;flex-shrink:0;align-items:flex-start">
         <button class="btn btn-outline btn-sm" onclick="clearMapPolygon()">Clear</button>
@@ -290,6 +295,8 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>
