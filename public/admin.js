@@ -154,7 +154,7 @@ function loadGoogleMapsScript(key) {
   return new Promise(resolve => {
     if (window.google && window.google.maps) { resolve(); return; }
     const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=drawing`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=drawing,places`;
     s.onload = resolve;
     document.head.appendChild(s);
   });
@@ -219,6 +219,21 @@ function initGoogleMap(loc) {
     if (currentPolygon) currentPolygon.setMap(null);
     currentPolygon = poly;
     drawingManager.setDrawingMode(null);
+  });
+
+  const searchInput = document.getElementById('map-search');
+  searchInput.value = '';
+  const autocomplete = new google.maps.places.Autocomplete(searchInput);
+  autocomplete.bindTo('bounds', gMap);
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace();
+    if (!place.geometry) return;
+    if (place.geometry.viewport) {
+      gMap.fitBounds(place.geometry.viewport);
+    } else {
+      gMap.setCenter(place.geometry.location);
+      gMap.setZoom(19);
+    }
   });
 }
 
