@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Legacy Landscape Management</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/logo.png">
-  <meta name="theme-color" content="#2d6a4f">
+  <meta name="theme-color" content="#1b4332">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
@@ -19,7 +19,7 @@
     <div class="login-card">
       <div class="login-logo">
         <img src="/logo.png" alt="Legacy Landscape Management" style="max-width:220px;margin-bottom:.5rem;display:block;margin-left:auto;margin-right:auto">
-        <p style="margin-top:.25rem">Employee Time Tracker</p>
+        <p>Employee Time Tracker</p>
       </div>
       <div id="login-error" class="alert alert-error section-hidden"></div>
       <div class="form-group">
@@ -32,7 +32,7 @@
       </div>
       <button class="btn btn-primary btn-block btn-lg" onclick="login()">Sign In</button>
       <div id="install-banner" class="section-hidden" style="margin-top:.75rem">
-        <button class="btn btn-outline btn-block" id="install-btn" onclick="installApp()">📱 Add to Home Screen</button>
+        <button class="btn btn-outline btn-block" onclick="installApp()">📱 Add to Home Screen</button>
       </div>
       <div id="ios-banner" class="section-hidden" style="margin-top:.75rem;background:var(--green-pale);border-radius:var(--r-sm);padding:.65rem;font-size:.8rem;color:var(--green-dark);text-align:center;line-height:1.5">
         To install: tap <strong>Share ⬆</strong> then <strong>"Add to Home Screen"</strong>
@@ -56,17 +56,15 @@
     </div>
   </header>
 
-  <div class="container" style="padding-top:1rem">
-    <div id="app-alert" class="section-hidden"></div>
+  <div id="app-alert" class="section-hidden" style="margin:.75rem 1rem 0"></div>
 
-    <!-- Status: clocked out -->
+  <!-- TAB: Clock In/Out -->
+  <div id="tab-clock" class="tab-pane container" style="padding-top:1rem">
     <div id="s-out" class="clock-status out">
       <span class="clock-icon">⏸</span>
       <div class="clock-label">You're Clocked Out</div>
-      <div class="clock-sub">Select a location below to start</div>
+      <div class="clock-sub">Select a job site below to start</div>
     </div>
-
-    <!-- Status: clocked in -->
     <div id="s-in" class="clock-status in section-hidden">
       <span class="clock-icon">▶</span>
       <div class="clock-label">Currently Working</div>
@@ -74,47 +72,64 @@
       <div id="s-timer" class="clock-timer">0:00:00</div>
       <div id="s-since" class="clock-sub"></div>
     </div>
-
-    <!-- Clock In form -->
     <div id="form-in" class="card">
       <div class="card-title">Clock In</div>
-      <div class="form-group mb-0" style="margin-bottom:.75rem">
-        <label class="form-label">Select Location / Job Site</label>
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label class="form-label">Select Job Site</label>
         <select id="loc-select" class="form-control">
           <option value="">— Choose a location —</option>
         </select>
       </div>
       <button class="btn btn-success btn-block btn-lg" onclick="clockIn()">▶ Clock In</button>
     </div>
-
-    <!-- Clock Out form -->
     <div id="form-out" class="card section-hidden">
       <div class="card-title">Clock Out</div>
-      <div class="form-group mb-0" style="margin-bottom:.75rem">
+      <div class="form-group" style="margin-bottom:.75rem">
         <label class="form-label">Notes (optional)</label>
         <input id="out-notes" type="text" class="form-control" placeholder="e.g. Mowed front lawn, trimmed hedges">
       </div>
       <button class="btn btn-danger btn-block btn-lg" onclick="clockOut()">⏹ Clock Out</button>
     </div>
+  </div>
 
-    <!-- Weekly summary -->
-    <div class="card">
-      <div class="card-title">This Week</div>
-      <div class="flex justify-between items-center">
-        <span class="text-muted" style="font-size:.875rem">Total Hours</span>
-        <span id="week-hours" class="font-bold text-green" style="font-size:1.2rem">—</span>
-      </div>
+  <!-- TAB: Hours -->
+  <div id="tab-hours" class="tab-pane section-hidden container" style="padding-top:1rem">
+    <div class="week-stat">
+      <div class="week-stat-value" id="week-hours">—</div>
+      <div class="week-stat-label">This Week's Total Hours</div>
     </div>
+    <div class="card">
+      <div class="card-title">This Week Breakdown</div>
+      <div id="week-breakdown"><div class="table-empty">Loading…</div></div>
+    </div>
+  </div>
 
-    <!-- History -->
+  <!-- TAB: History -->
+  <div id="tab-history" class="tab-pane section-hidden container" style="padding-top:1rem">
     <div class="card">
       <div class="sec-hdr">
-        <div class="card-title mb-0">Recent Entries</div>
-        <button class="btn btn-outline btn-sm" onclick="loadHistory(true)">View All</button>
+        <div class="card-title mb-0">Time History</div>
+        <button class="btn btn-outline btn-sm" onclick="loadHistory(true)">Load All</button>
       </div>
       <div id="entries-list"><div class="table-empty">No entries yet</div></div>
     </div>
   </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <button class="bottom-nav-btn active" id="nav-clock" onclick="showWorkerTab('clock')">
+      <span class="bottom-nav-icon">⏱</span>
+      Clock
+    </button>
+    <button class="bottom-nav-btn" id="nav-hours" onclick="showWorkerTab('hours')">
+      <span class="bottom-nav-icon">📊</span>
+      Hours
+    </button>
+    <button class="bottom-nav-btn" id="nav-history" onclick="showWorkerTab('history')">
+      <span class="bottom-nav-icon">📋</span>
+      History
+    </button>
+  </nav>
 </div>
 
 <script src="app.js"></script>

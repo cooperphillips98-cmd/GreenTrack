@@ -66,8 +66,16 @@ async function showApp() {
   document.getElementById('hdr-name').textContent = worker.name;
   await loadLocations();
   await refreshStatus();
-  await loadHistory();
-  await loadWeekHours();
+  showWorkerTab('clock');
+}
+
+function showWorkerTab(tab) {
+  ['clock', 'hours', 'history'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('section-hidden', t !== tab);
+    document.getElementById('nav-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'hours') loadWeekHours();
+  if (tab === 'history') loadHistory();
 }
 
 async function loadLocations() {
@@ -152,7 +160,26 @@ async function loadWeekHours() {
   const start = d.toISOString().split('T')[0];
   const entries = await get(`/api/entries/worker/${worker.id}?startDate=${start}`);
   const mins = entries.reduce((s, e) => s + (e.duration_minutes || 0), 0);
-  document.getElementById('week-hours').textContent = fmtDur(mins) || '0m';
+  document.getElementById('week-hours').textContent = fmtDur(mins) || '0h';
+
+  const byDay = {};
+  entries.forEach(e => {
+    const day = fmtDate(e.clock_in);
+    byDay[day] = (byDay[day] || 0) + (e.duration_minutes || 0);
+  });
+  const bd = document.getElementById('week-breakdown');
+  const days = Object.keys(byDay);
+  if (!days.length) {
+    bd.innerHTML = '<div class="table-empty">No entries this week</div>';
+    return;
+  }
+  bd.innerHTML = days.map(day => `
+    <div class="entry-row">
+      <div class="entry-main">
+        <div class="entry-loc">${esc(day)}</div>
+        <div class="entry-dur">${fmtDur(byDay[day]) || '0m'}</div>
+      </div>
+    </div>`).join('');
 }
 
 // Helpers
